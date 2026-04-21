@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Zap, Eye, EyeOff, ArrowRight } from "lucide-react";
+import { toast } from "sonner";
+import { useAuth } from "@/features/auth/useAuth";
 
 function GoogleIcon() {
   return (
@@ -15,18 +17,25 @@ function GoogleIcon() {
 
 export function SignIn() {
   const navigate = useNavigate();
+  const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleSignIn = () => {
+  const handleSignIn = async () => {
     if (!email || !password) return;
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await signIn(email, password);
+      toast.success("Welcome back!");
       navigate("/app/dashboard");
-    }, 900);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Sign in failed";
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

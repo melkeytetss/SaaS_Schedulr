@@ -11,9 +11,9 @@
     "db:seed": "supabase db reset",
     "functions:serve": "supabase functions serve",
     "functions:deploy": "supabase functions deploy",
-    "types:gen": "supabase gen types typescript --local > ../frontend/src/types/database.ts"
+    "types:gen": "supabase gen types typescript --project-id pmqurfjcjxjfryldzrsq > ../frontend/src/types/database.ts"
   },
   "devDependencies": {
-    "supabase": "2.2.1"
+    "supabase": "2.90.0"
   }
 }

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Zap, Eye, EyeOff, Check } from "lucide-react";
+import { toast } from "sonner";
+import { useAuth } from "@/features/auth/useAuth";
 
 function GoogleIcon() {
   return (
@@ -28,6 +30,7 @@ const STRENGTH_COLORS = ["", "#E8593C", "#F0A429", "#4B9EFF", "#2ECC8A"];
 
 export function SignUp() {
   const navigate = useNavigate();
+  const { signUp } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,13 +39,19 @@ export function SignUp() {
 
   const strength = getStrength(password);
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!name || !email || !password) return;
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await signUp(email, password, name);
+      toast.success("Account created. Welcome to Schedulr!");
       navigate("/app/dashboard");
-    }, 1100);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Sign up failed";
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const inputStyle = {
