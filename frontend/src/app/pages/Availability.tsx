@@ -1,9 +1,17 @@
-import { useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import {
-  ChevronLeft, ChevronRight, Plus, Trash2, Clock,
+  ChevronLeft, ChevronRight, Plus, Trash2,
   Globe, Check, CalendarX, CalendarClock, Zap, Save,
-  Info, ArrowRight, Sun, Moon
+  Info, Sun, Moon
 } from "lucide-react";
+import { toast } from "sonner";
+import {
+  useAvailabilityRules,
+  useReplaceAvailabilityRules,
+  useAvailabilityOverrides,
+  useReplaceAvailabilityOverrides,
+} from "@/features/availability/useAvailability";
+import { useAuth } from "@/features/auth/useAuth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface TimeSlot {
@@ -39,6 +47,10 @@ const DEFAULT_SCHEDULE: Record<string, DaySchedule> = {
 
 const DAYS_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DAYS_FULL  = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+// DB stores weekday as 0=Sun, 1=Mon, ..., 6=Sat
+const DAY_TO_WEEKDAY: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+const WEEKDAY_TO_DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const TIMEZONES = [
   "UTC−8 Pacific Time",
@@ -291,19 +303,66 @@ function OverrideCalendar({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export function Availability() {
+  const { user } = useAuth();
+  const { data: dbRules = [] } = useAvailabilityRules();
+  const { data: dbOverrides = [] } = useAvailabilityOverrides();
+  const replaceRules = useReplaceAvailabilityRules();
+  const replaceOverrides = useReplaceAvailabilityOverrides();
+
   const [schedule, setSchedule] = useState<Record<string, DaySchedule>>(DEFAULT_SCHEDULE);
-  const [overrides, setOverrides] = useState<DateOverride[]>([
-    { date: "2026-04-22", type: "blocked" },
-    { date: "2026-04-25", type: "custom", slots: [{ id: 50, start: "10:00", end: "12:00" }] },
-  ]);
+  const [overrides, setOverrides] = useState<DateOverride[]>([]);
   const [timezone, setTimezone] = useState(TIMEZONES[5]);
   const [bufferBefore, setBufferBefore] = useState("15 min");
   const [bufferAfter,  setBufferAfter]  = useState("0 min");
   const [minNotice, setMinNotice] = useState("2 hours");
   const [dailyLimit, setDailyLimit] = useState("No limit");
   const [saved, setSaved] = useState(false);
-  const [pendingOverrideDate, setPendingOverrideDate] = useState<string | null>(null);
   const [selectedOverrideDay, setSelectedOverrideDay] = useState<string | null>(null);
+
+  // Hydrate schedule from DB on first load
+  useEffect(() => {
+    if (dbRules.length === 0) return;
+    const base: Record<string, DaySchedule> = {};
+    for (const day of DAYS_ORDER) base[day] = { enabled: false, slots: [] };
+    for (const r of dbRules) {
+      const day = WEEKDAY_TO_DAY[r.weekday];
+      base[day].enabled = true;
+      base[day].slots.push({ id: nextId++, start: r.start_time.slice(0, 5), end: r.end_time.slice(0, 5) });
+    }
+    // Keep fallback default slot for empty enabled days (shouldn't happen, but safe).
+    for (const day of DAYS_ORDER) {
+      if (base[day].enabled && base[day].slots.length === 0) {
+        base[day].slots.push({ id: nextId++, start: "09:00", end: "17:00" });
+      }
+      if (!base[day].enabled && base[day].slots.length === 0) {
+        base[day].slots.push({ id: nextId++, start: "09:00", end: "17:00" });
+      }
+    }
+    setSchedule(base);
+  }, [dbRules]);
+
+  // Hydrate overrides from DB
+  useEffect(() => {
+    if (dbOverrides.length === 0) {
+      setOverrides([]);
+      return;
+    }
+    const byDate = new Map<string, DateOverride>();
+    for (const row of dbOverrides) {
+      if (!row.is_available) {
+        byDate.set(row.date, { date: row.date, type: "blocked" });
+      } else if (row.start_time && row.end_time) {
+        const slot = { id: nextId++, start: row.start_time.slice(0, 5), end: row.end_time.slice(0, 5) };
+        const existing = byDate.get(row.date);
+        if (existing && existing.type === "custom") {
+          existing.slots!.push(slot);
+        } else {
+          byDate.set(row.date, { date: row.date, type: "custom", slots: [slot] });
+        }
+      }
+    }
+    setOverrides(Array.from(byDate.values()));
+  }, [dbOverrides]);
 
   // ── Day schedule mutations ──
   const toggleDay = (day: string) => {
@@ -394,9 +453,64 @@ export function Availability() {
 
   const enabledDaysCount = DAYS_ORDER.filter((d) => schedule[d].enabled).length;
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+  const handleSave = async () => {
+    if (!user) return;
+    // Build rules from schedule
+    const rules: { owner_id: string; weekday: number; start_time: string; end_time: string }[] = [];
+    for (const day of DAYS_ORDER) {
+      const d = schedule[day];
+      if (!d.enabled) continue;
+      for (const slot of d.slots) {
+        if (slot.start >= slot.end) {
+          toast.error(`${day}: end time must be after start time`);
+          return;
+        }
+        rules.push({
+          owner_id: user.id,
+          weekday: DAY_TO_WEEKDAY[day],
+          start_time: `${slot.start}:00`,
+          end_time: `${slot.end}:00`,
+        });
+      }
+    }
+    // Build override rows
+    const overrideRows: {
+      owner_id: string;
+      date: string;
+      is_available: boolean;
+      start_time: string | null;
+      end_time: string | null;
+    }[] = [];
+    for (const o of overrides) {
+      if (o.type === "blocked") {
+        overrideRows.push({
+          owner_id: user.id,
+          date: o.date,
+          is_available: false,
+          start_time: null,
+          end_time: null,
+        });
+      } else {
+        for (const slot of o.slots ?? []) {
+          overrideRows.push({
+            owner_id: user.id,
+            date: o.date,
+            is_available: true,
+            start_time: `${slot.start}:00`,
+            end_time: `${slot.end}:00`,
+          });
+        }
+      }
+    }
+    try {
+      await replaceRules.mutateAsync(rules);
+      await replaceOverrides.mutateAsync(overrideRows);
+      setSaved(true);
+      toast.success("Availability saved");
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Save failed");
+    }
   };
 
   // Next available slot: find next enabled weekday from today
@@ -453,17 +567,20 @@ export function Availability() {
           </span>
           <button
             onClick={handleSave}
+            disabled={replaceRules.isPending || replaceOverrides.isPending}
             className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm transition-all"
             style={{
               background: saved ? "rgba(46,204,138,0.12)" : "#E8593C",
               color: saved ? "#2ECC8A" : "white",
               border: saved ? "1px solid rgba(46,204,138,0.3)" : "none",
+              opacity: replaceRules.isPending || replaceOverrides.isPending ? 0.7 : 1,
+              cursor: replaceRules.isPending || replaceOverrides.isPending ? "not-allowed" : "pointer",
             }}
             onMouseEnter={(e) => { if (!saved) (e.currentTarget as HTMLElement).style.background = "#FF6B47"; }}
             onMouseLeave={(e) => { if (!saved) (e.currentTarget as HTMLElement).style.background = "#E8593C"; }}
           >
             {saved ? <Check size={14} strokeWidth={1.5} /> : <Save size={14} strokeWidth={1.5} />}
-            {saved ? "Saved!" : "Save changes"}
+            {saved ? "Saved!" : replaceRules.isPending || replaceOverrides.isPending ? "Saving…" : "Save changes"}
           </button>
         </div>
       </div>

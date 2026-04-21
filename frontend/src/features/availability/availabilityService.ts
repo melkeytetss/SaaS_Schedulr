@@ -32,13 +32,30 @@ export const availabilityService = {
     return data;
   },
 
-  async listOverrides(ownerId: string, fromDate: string, toDate: string) {
-    const { data, error } = await supabase
+  async listOverrides(ownerId: string, fromDate?: string, toDate?: string) {
+    let q = supabase
       .from("availability_overrides")
       .select("*")
       .eq("owner_id", ownerId)
-      .gte("date", fromDate)
-      .lte("date", toDate);
+      .order("date");
+    if (fromDate) q = q.gte("date", fromDate);
+    if (toDate) q = q.lte("date", toDate);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data;
+  },
+
+  async replaceOverrides(ownerId: string, overrides: Omit<AvailabilityOverride, "id">[]) {
+    const del = await supabase
+      .from("availability_overrides")
+      .delete()
+      .eq("owner_id", ownerId);
+    if (del.error) throw del.error;
+    if (overrides.length === 0) return [];
+    const { data, error } = await supabase
+      .from("availability_overrides")
+      .insert(overrides)
+      .select();
     if (error) throw error;
     return data;
   },

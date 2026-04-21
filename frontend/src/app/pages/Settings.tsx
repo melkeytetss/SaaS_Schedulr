@@ -4,6 +4,9 @@ import {
   ExternalLink, Download, Trash2, ChevronDown,
   Check, Globe,
 } from "lucide-react";
+import { toast } from "sonner";
+import { useAuth } from "@/features/auth/useAuth";
+import { useMyProfile, useUpdateProfile } from "@/features/profile/useProfile";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Section {
@@ -19,17 +22,29 @@ const SECTIONS: Section[] = [
   { id: "danger",        label: "Danger zone",    icon: AlertTriangle},
 ];
 
-const TIMEZONES = [
-  "Asia/Manila (UTC+8)",
-  "America/New_York (UTC-5)",
-  "America/Chicago (UTC-6)",
-  "America/Los_Angeles (UTC-8)",
-  "Europe/London (UTC+0)",
-  "Europe/Berlin (UTC+1)",
-  "Asia/Tokyo (UTC+9)",
-  "Australia/Sydney (UTC+11)",
-  "Pacific/Auckland (UTC+12)",
+type TzOption = { iana: string; label: string };
+const TIMEZONES: TzOption[] = [
+  { iana: "Asia/Manila",         label: "Asia/Manila (UTC+8)" },
+  { iana: "America/New_York",    label: "America/New_York (UTC-5)" },
+  { iana: "America/Chicago",     label: "America/Chicago (UTC-6)" },
+  { iana: "America/Los_Angeles", label: "America/Los_Angeles (UTC-8)" },
+  { iana: "Europe/London",       label: "Europe/London (UTC+0)" },
+  { iana: "Europe/Berlin",       label: "Europe/Berlin (UTC+1)" },
+  { iana: "Asia/Tokyo",          label: "Asia/Tokyo (UTC+9)" },
+  { iana: "Australia/Sydney",    label: "Australia/Sydney (UTC+11)" },
+  { iana: "Pacific/Auckland",    label: "Pacific/Auckland (UTC+12)" },
+  { iana: "UTC",                 label: "UTC (UTC+0)" },
 ];
+
+function tzLabel(iana: string): string {
+  return TIMEZONES.find((t) => t.iana === iana)?.label ?? iana;
+}
+
+function initialsFrom(name: string | null | undefined): string {
+  if (!name) return "··";
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "··";
+}
 
 // ─── Shared input styles ──────────────────────────────────────────────────────
 function FieldLabel({ children }: { children: React.ReactNode }) {
@@ -50,6 +65,7 @@ function TextInput({
   placeholder,
   type = "text",
   prefix,
+  readOnly,
 }: {
   label: string;
   value: string;
@@ -57,6 +73,7 @@ function TextInput({
   placeholder?: string;
   type?: string;
   prefix?: string;
+  readOnly?: boolean;
 }) {
   return (
     <div>
@@ -88,8 +105,13 @@ function TextInput({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
+          readOnly={readOnly}
           className="flex-1 px-3 py-2.5 text-sm outline-none bg-transparent"
-          style={{ color: "#F4F2EE", caretColor: "#E8593C" }}
+          style={{
+            color: readOnly ? "#8A8882" : "#F4F2EE",
+            caretColor: "#E8593C",
+            cursor: readOnly ? "not-allowed" : "text",
+          }}
         />
       </div>
     </div>
@@ -169,7 +191,7 @@ function TimezoneDropdown({
         >
           <div className="flex items-center gap-2">
             <Globe size={13} strokeWidth={1.5} style={{ color: "#4A4946" }} />
-            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{value}</span>
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{tzLabel(value)}</span>
           </div>
           <ChevronDown
             size={13}
@@ -188,29 +210,32 @@ function TimezoneDropdown({
               overflowY: "auto",
             }}
           >
-            {TIMEZONES.map((tz) => (
-              <button
-                key={tz}
-                onClick={() => { onChange(tz); setOpen(false); }}
-                className="w-full text-left px-4 py-2.5 flex items-center gap-2 transition-colors"
-                style={{
-                  background: tz === value ? "rgba(232,89,60,0.08)" : "transparent",
-                  color: tz === value ? "#F4F2EE" : "#8A8882",
-                  fontFamily: "'DM Mono', monospace",
-                  fontSize: 11,
-                }}
-                onMouseEnter={(e) => {
-                  if (tz !== value) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)";
-                }}
-                onMouseLeave={(e) => {
-                  if (tz !== value) (e.currentTarget as HTMLElement).style.background = "transparent";
-                }}
-              >
-                {tz === value && <Check size={10} strokeWidth={2} style={{ color: "#E8593C", flexShrink: 0 }} />}
-                {tz !== value && <span style={{ width: 10, flexShrink: 0 }} />}
-                {tz}
-              </button>
-            ))}
+            {TIMEZONES.map((tz) => {
+              const selected = tz.iana === value;
+              return (
+                <button
+                  key={tz.iana}
+                  onClick={() => { onChange(tz.iana); setOpen(false); }}
+                  className="w-full text-left px-4 py-2.5 flex items-center gap-2 transition-colors"
+                  style={{
+                    background: selected ? "rgba(232,89,60,0.08)" : "transparent",
+                    color: selected ? "#F4F2EE" : "#8A8882",
+                    fontFamily: "'DM Mono', monospace",
+                    fontSize: 11,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!selected) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!selected) (e.currentTarget as HTMLElement).style.background = "transparent";
+                  }}
+                >
+                  {selected && <Check size={10} strokeWidth={2} style={{ color: "#E8593C", flexShrink: 0 }} />}
+                  {!selected && <span style={{ width: 10, flexShrink: 0 }} />}
+                  {tz.label}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -316,37 +341,55 @@ function SectionBlock({
 }
 
 // ─── Save button ──────────────────────────────────────────────────────────────
-function SaveButton({ label = "Save changes" }: { label?: string }) {
+function SaveButton({
+  label = "Save changes",
+  onSave,
+  disabled,
+}: {
+  label?: string;
+  onSave: () => Promise<void> | void;
+  disabled?: boolean;
+}) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (saving || disabled) return;
     setSaving(true);
-    setTimeout(() => {
-      setSaving(false);
+    try {
+      await onSave();
       setSaved(true);
       setTimeout(() => setSaved(false), 2200);
-    }, 700);
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const isDisabled = disabled || saving;
 
   return (
     <button
       onClick={handleSave}
+      disabled={isDisabled}
       className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm transition-all mt-6"
       style={{
         background: saved
           ? "rgba(46,204,138,0.12)"
           : saving
           ? "rgba(232,89,60,0.7)"
+          : disabled
+          ? "rgba(232,89,60,0.3)"
           : "#E8593C",
         color: saved ? "#2ECC8A" : "white",
         border: saved ? "1px solid rgba(46,204,138,0.3)" : "none",
+        cursor: isDisabled ? "not-allowed" : "pointer",
+        opacity: disabled && !saving && !saved ? 0.6 : 1,
       }}
       onMouseEnter={(e) => {
-        if (!saving && !saved) (e.currentTarget as HTMLElement).style.background = "#FF6B47";
+        if (!saving && !saved && !disabled) (e.currentTarget as HTMLElement).style.background = "#FF6B47";
       }}
       onMouseLeave={(e) => {
-        if (!saving && !saved) (e.currentTarget as HTMLElement).style.background = "#E8593C";
+        if (!saving && !saved && !disabled) (e.currentTarget as HTMLElement).style.background = "#E8593C";
       }}
     >
       {saved ? (
@@ -365,23 +408,76 @@ function SaveButton({ label = "Save changes" }: { label?: string }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export function Settings() {
+  const { user } = useAuth();
+  const { data: profile } = useMyProfile();
+  const updateProfile = useUpdateProfile();
+
   // Profile
-  const [name,     setName]     = useState("Marcus Kowalski");
-  const [email,    setEmail]    = useState("marcus@studiok.co");
-  const [timezone, setTimezone] = useState("Asia/Manila (UTC+8)");
+  const [name,     setName]     = useState("");
+  const email                   = user?.email ?? "";
+  const [timezone, setTimezone] = useState("UTC");
 
   // Booking page
-  const [slug,      setSlug]      = useState("marcus-k");
+  const [slug,      setSlug]      = useState("");
   const [showPhoto, setShowPhoto] = useState(true);
-  const [bio,       setBio]       = useState("Helping founders and freelancers build better client relationships. 10 years in strategy consulting, now independent.");
+  const [bio,       setBio]       = useState("");
 
-  // Notifications
+  // Notifications (local-only for now — no schema columns yet)
   const [notifNew,     setNotifNew]     = useState(true);
   const [notifCancel,  setNotifCancel]  = useState(true);
   const [notifSummary, setNotifSummary] = useState(false);
 
   // Active section nav
   const [activeSection, setActiveSection] = useState("profile");
+
+  // Hydrate from loaded profile
+  useEffect(() => {
+    if (!profile) return;
+    setName(profile.full_name ?? "");
+    setTimezone(profile.timezone ?? "UTC");
+    setSlug(profile.username ?? "");
+  }, [profile]);
+
+  const saveProfile = async () => {
+    const trimmed = name.trim();
+    try {
+      await updateProfile.mutateAsync({
+        full_name: trimmed || null,
+        timezone,
+      });
+      toast.success("Profile updated");
+    } catch (e) {
+      toast.error((e as Error).message || "Failed to update profile");
+      throw e;
+    }
+  };
+
+  const saveBookingPage = async () => {
+    const trimmed = slug.trim().toLowerCase();
+    if (!trimmed) {
+      toast.error("Username is required");
+      throw new Error("empty username");
+    }
+    if (!/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(trimmed)) {
+      toast.error("Use 3–40 chars: lowercase letters, numbers, hyphens");
+      throw new Error("invalid username");
+    }
+    try {
+      await updateProfile.mutateAsync({ username: trimmed });
+      setSlug(trimmed);
+      toast.success("Booking page updated");
+    } catch (e) {
+      const msg = (e as { code?: string; message?: string }).code === "23505"
+        ? "That username is already taken"
+        : (e as Error).message || "Failed to update";
+      toast.error(msg);
+      throw e;
+    }
+  };
+
+  const saveNotifications = async () => {
+    toast.info("Notification preferences aren't persisted yet");
+  };
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -487,7 +583,7 @@ export function Settings() {
                     fontSize: 22,
                   }}
                 >
-                  MK
+                  {initialsFrom(name)}
                 </div>
                 <div
                   className="absolute inset-0 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
@@ -521,12 +617,12 @@ export function Settings() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <TextInput label="Full name" value={name} onChange={setName} placeholder="Your name" />
-              <TextInput label="Email address" value={email} onChange={setEmail} placeholder="you@example.com" type="email" />
+              <TextInput label="Email address" value={email} onChange={() => {}} placeholder="you@example.com" type="email" readOnly />
             </div>
             <div className="mt-4">
               <TimezoneDropdown value={timezone} onChange={setTimezone} />
             </div>
-            <SaveButton />
+            <SaveButton onSave={saveProfile} disabled={!profile} />
           </SectionBlock>
 
           {/* ── Booking page ── */}
@@ -617,7 +713,7 @@ export function Settings() {
                 {bio.length} / 280
               </div>
             </div>
-            <SaveButton />
+            <SaveButton onSave={saveBookingPage} disabled={!profile} />
           </SectionBlock>
 
           {/* ── Notifications ── */}
@@ -654,7 +750,7 @@ export function Settings() {
                 />
               </div>
             </div>
-            <SaveButton label="Save preferences" />
+            <SaveButton label="Save preferences" onSave={saveNotifications} />
           </SectionBlock>
 
           {/* ── Danger zone ── */}

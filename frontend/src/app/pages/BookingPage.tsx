@@ -1,77 +1,213 @@
-import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useMemo, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { useNavigate, useParams } from "react-router";
 import {
-  ChevronLeft, ChevronRight, Video, Check, Calendar,
-  Clock, Zap, ArrowLeft, Lock, CreditCard
+  ChevronLeft, ChevronRight, Video, Phone, MapPin, FileText,
+  Calendar, Clock, Zap, ArrowLeft,
 } from "lucide-react";
+import { toast } from "sonner";
+import { usePublicEvent } from "@/features/events/useEvents";
+import { useEventBlockedDates } from "@/features/events/useEventBlockedDates";
+import {
+  useAvailabilityRulesFor,
+  useAvailabilityOverridesFor,
+} from "@/features/availability/useAvailability";
+import {
+  generateSlots,
+  isDateBlocked,
+} from "@/features/availability/slots";
+import { bookingsService } from "@/features/bookings/bookingsService";
 
 const MONTHS = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December"
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ];
 
-const AVAILABLE_DATES = new Set([1,2,4,5,7,8,9,11,14,15,16,18,19,21,22,24,25,28,29,30]);
+const LOCATION_LABELS: Record<string, { label: string; Icon: typeof Video }> = {
+  google_meet: { label: "Google Meet", Icon: Video },
+  zoom: { label: "Zoom", Icon: Video },
+  phone: { label: "Phone call", Icon: Phone },
+  in_person: { label: "In person", Icon: MapPin },
+  custom: { label: "Custom", Icon: FileText },
+};
 
-const SLOTS = [
-  "09:00","09:30","10:00","10:30","11:00","11:30",
-  "12:00","12:30","14:00","14:30","15:00","15:30","16:00","16:30",
-];
+type Step = "calendar" | "form" | "confirmed";
 
-type Step = "calendar" | "form" | "payment" | "confirmed";
+function sameDay(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
 
 export function BookingPage() {
   const navigate = useNavigate();
-  const [month, setMonth] = useState(3); // April = 3
-  const [year] = useState(2026);
-  const [selectedDate, setSelectedDate] = useState<number | null>(null);
+  const { username, slug } = useParams<{ username: string; slug: string }>();
+
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  const {
+    data: event,
+    isLoading: eventLoading,
+    isError: eventError,
+  } = usePublicEvent(username ?? "", slug ?? "");
+
+  const ownerId = event?.owner_id;
+  const profile = (event as typeof event & {
+    profiles?: { username: string; full_name: string; avatar_url: string | null; timezone: string | null };
+  } | undefined)?.profiles;
+
+  const { data: rules = [] } = useAvailabilityRulesFor(ownerId);
+  const { data: overrides = [] } = useAvailabilityOverridesFor(ownerId);
+  const { data: blockedRows = [] } = useEventBlockedDates(event?.id);
+  const blockedDateStrs = useMemo(
+    () => blockedRows.map((r) => r.date),
+    [blockedRows],
+  );
+
+  const [viewMonth, setViewMonth] = useState<Date>(
+    new Date(today.getFullYear(), today.getMonth(), 1),
+  );
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [step, setStep] = useState<Step>("calendar");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [goal, setGoal] = useState("");
 
-  // Payment state
-  const [cardNumber, setCardNumber] = useState("");
-  const [expiry, setExpiry] = useState("");
-  const [cvc, setCvc] = useState("");
-  const [paying, setPaying] = useState(false);
+  const createBooking = useMutation({
+    mutationFn: bookingsService.create,
+  });
 
+  const durationMin = event?.duration_min ?? 30;
+  const bookingWindowDays = event?.booking_window_days ?? null;
+  const horizonEnd = useMemo(() => {
+    if (bookingWindowDays == null) return null;
+    const d = new Date(todayStart);
+    d.setDate(todayStart.getDate() + bookingWindowDays);
+    return d;
+  }, [bookingWindowDays, todayStart]);
+
+  const slots = useMemo(() => {
+    if (!selectedDate || !event) return [];
+    return generateSlots({
+      date: selectedDate,
+      durationMin,
+      rules,
+      overrides,
+      eventBlockedDates: blockedDateStrs,
+    });
+  }, [selectedDate, event, durationMin, rules, overrides, blockedDateStrs]);
+
+  if (eventLoading) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: "#0F0F11", color: "#8A8882" }}
+      >
+        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13 }}>
+          Loading booking page…
+        </span>
+      </div>
+    );
+  }
+
+  if (eventError || !event) {
+    return (
+      <div
+        className="min-h-screen flex flex-col items-center justify-center gap-4 p-6"
+        style={{ background: "#0F0F11" }}
+      >
+        <h1
+          style={{
+            fontFamily: "'Fraunces', serif",
+            fontSize: "1.5rem",
+            color: "#F4F2EE",
+          }}
+        >
+          This booking page isn't available.
+        </h1>
+        <p className="text-sm" style={{ color: "#8A8882" }}>
+          The link may be incorrect, or the host has made this event inactive.
+        </p>
+        <button
+          onClick={() => navigate("/")}
+          className="mt-2 px-4 py-2 rounded-lg text-sm"
+          style={{ background: "#E8593C", color: "white" }}
+        >
+          Back to home
+        </button>
+      </div>
+    );
+  }
+
+  const locationMeta = LOCATION_LABELS[event.location_kind] ?? {
+    label: event.location_kind,
+    Icon: Video,
+  };
+  const LocationIcon = locationMeta.Icon;
+
+  const initials =
+    (profile?.full_name ?? "?")
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase() ?? "")
+      .join("") || "?";
+
+  const year = viewMonth.getFullYear();
+  const month = viewMonth.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay();
   const offset = firstDay === 0 ? 6 : firstDay - 1; // Monday start
 
-  const handleConfirm = () => {
-    if (name && email) setStep("payment");
+  const canGoPrev =
+    viewMonth.getFullYear() > today.getFullYear() ||
+    (viewMonth.getFullYear() === today.getFullYear() &&
+      viewMonth.getMonth() > today.getMonth());
+
+  const isDayAvailable = (date: Date) => {
+    if (date < todayStart) return false;
+    if (horizonEnd && date > horizonEnd) return false;
+    return !isDateBlocked(date, rules, overrides, blockedDateStrs);
   };
 
-  const handlePay = () => {
-    if (!cardNumber || !expiry || !cvc) return;
-    setPaying(true);
-    setTimeout(() => {
-      setPaying(false);
+  const handleConfirm = async () => {
+    if (!event || !selectedDate || !selectedTime || !name.trim() || !email.trim()) return;
+    const [hh, mm] = selectedTime.split(":").map(Number);
+    const starts = new Date(selectedDate);
+    starts.setHours(hh, mm, 0, 0);
+    const ends = new Date(starts.getTime() + event.duration_min * 60_000);
+    try {
+      await createBooking.mutateAsync({
+        event_type_id: event.id,
+        owner_id: event.owner_id,
+        invitee_name: name.trim(),
+        invitee_email: email.trim(),
+        notes: goal.trim() || null,
+        starts_at: starts.toISOString(),
+        ends_at: ends.toISOString(),
+      });
       setStep("confirmed");
-    }, 1400);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not create booking");
+    }
   };
 
-  // Format card number with spaces
-  const formatCard = (v: string) => {
-    const digits = v.replace(/\D/g, "").slice(0, 16);
-    return digits.replace(/(.{4})/g, "$1 ").trim();
-  };
-
-  // Format expiry MM/YY
-  const formatExpiry = (v: string) => {
-    const digits = v.replace(/\D/g, "").slice(0, 4);
-    if (digits.length >= 3) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-    return digits;
-  };
+  const confirmationDateLabel = selectedDate
+    ? selectedDate.toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      })
+    : "";
 
   return (
     <div
       className="min-h-screen flex items-center justify-center p-4 md:p-8"
       style={{ background: "#0F0F11" }}
     >
-      {/* Back to landing */}
       <button
         onClick={() => navigate("/")}
         className="fixed top-6 left-6 flex items-center gap-2 text-sm z-10"
@@ -95,24 +231,31 @@ export function BookingPage() {
               {/* Left panel - host info */}
               <div
                 className="p-6 md:p-8"
-                style={{
-                  borderRight: "1px solid rgba(255,255,255,0.07)",
-                }}
+                style={{ borderRight: "1px solid rgba(255,255,255,0.07)" }}
               >
-                {/* Avatar */}
                 <div
-                  className="flex items-center justify-center rounded-full text-white text-lg mb-4"
+                  className="flex items-center justify-center rounded-full text-white text-lg mb-4 overflow-hidden"
                   style={{
                     width: 56,
                     height: 56,
-                    background: "#E8593C",
+                    background: event.color || "#E8593C",
                     fontFamily: "'DM Mono', monospace",
                   }}
                 >
-                  MK
+                  {profile?.avatar_url ? (
+                    <img
+                      src={profile.avatar_url}
+                      alt={profile.full_name ?? ""}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  ) : (
+                    initials
+                  )}
                 </div>
 
-                <div className="text-sm mb-1" style={{ color: "#8A8882" }}>Marcus K.</div>
+                <div className="text-sm mb-1" style={{ color: "#8A8882" }}>
+                  {profile?.full_name ?? "Your host"}
+                </div>
                 <h1
                   className="mb-3"
                   style={{
@@ -123,7 +266,7 @@ export function BookingPage() {
                     lineHeight: 1.2,
                   }}
                 >
-                  30-min Discovery Call
+                  {event.title}
                 </h1>
 
                 <div className="flex flex-wrap gap-2 mb-5">
@@ -136,7 +279,7 @@ export function BookingPage() {
                     }}
                   >
                     <Clock size={11} strokeWidth={1.5} />
-                    30 min
+                    {durationMin} min
                   </span>
                   <span
                     className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full"
@@ -146,17 +289,18 @@ export function BookingPage() {
                       fontFamily: "'DM Mono', monospace",
                     }}
                   >
-                    <Video size={11} strokeWidth={1.5} />
-                    Google Meet
+                    <LocationIcon size={11} strokeWidth={1.5} />
+                    {locationMeta.label}
                   </span>
                 </div>
 
-                <p className="text-sm" style={{ color: "#8A8882", lineHeight: 1.7 }}>
-                  Let's get to know each other. We'll cover your goals, your challenges, and
-                  whether we're a good fit to work together. No pressure, just a real conversation.
-                </p>
+                {event.description && (
+                  <p className="text-sm" style={{ color: "#8A8882", lineHeight: 1.7 }}>
+                    {event.description}
+                  </p>
+                )}
 
-                {selectedDate && selectedTime && (step === "form" || step === "payment") && (
+                {selectedDate && selectedTime && step === "form" && (
                   <div
                     className="mt-6 p-3 rounded-lg"
                     style={{
@@ -164,27 +308,29 @@ export function BookingPage() {
                       border: "1px solid rgba(232,89,60,0.2)",
                     }}
                   >
-                    <div className="text-xs mb-1" style={{ color: "#E8593C", fontFamily: "'DM Mono', monospace" }}>
+                    <div
+                      className="text-xs mb-1"
+                      style={{ color: "#E8593C", fontFamily: "'DM Mono', monospace" }}
+                    >
                       SELECTED TIME
                     </div>
                     <div className="text-sm" style={{ color: "#F4F2EE" }}>
-                      {MONTHS[month]} {selectedDate}, {year}
+                      {confirmationDateLabel}
                     </div>
                     <div
                       className="text-sm"
                       style={{ color: "#8A8882", fontFamily: "'DM Mono', monospace" }}
                     >
-                      {selectedTime} · 30 min
+                      {selectedTime} · {durationMin} min
                     </div>
                   </div>
                 )}
 
-                {/* Timezone */}
                 <div
                   className="mt-6 text-xs"
                   style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
                 >
-                  Showing times in: Asia/Manila (UTC+8) ▾
+                  Showing times in: {profile?.timezone ?? "UTC"}
                 </div>
               </div>
 
@@ -192,10 +338,7 @@ export function BookingPage() {
               <div className="p-6 md:p-8">
                 {step === "calendar" && (
                   <>
-                    {/* Month nav */}
-                    <div
-                      className="flex items-center justify-between mb-5"
-                    >
+                    <div className="flex items-center justify-between mb-5">
                       <span
                         style={{
                           fontFamily: "'Fraunces', serif",
@@ -208,14 +351,21 @@ export function BookingPage() {
                       </span>
                       <div className="flex gap-1">
                         <button
-                          onClick={() => setMonth(m => Math.max(0, m - 1))}
+                          onClick={() =>
+                            canGoPrev && setViewMonth(new Date(year, month - 1, 1))
+                          }
+                          disabled={!canGoPrev}
                           className="w-7 h-7 flex items-center justify-center rounded-lg transition-all"
-                          style={{ color: "#8A8882", background: "#1E1E21" }}
+                          style={{
+                            color: canGoPrev ? "#8A8882" : "#4A4946",
+                            background: "#1E1E21",
+                            cursor: canGoPrev ? "pointer" : "not-allowed",
+                          }}
                         >
                           <ChevronLeft size={14} />
                         </button>
                         <button
-                          onClick={() => setMonth(m => Math.min(11, m + 1))}
+                          onClick={() => setViewMonth(new Date(year, month + 1, 1))}
                           className="w-7 h-7 flex items-center justify-center rounded-lg transition-all"
                           style={{ color: "#8A8882", background: "#1E1E21" }}
                         >
@@ -224,9 +374,8 @@ export function BookingPage() {
                       </div>
                     </div>
 
-                    {/* Weekday headers */}
                     <div className="grid grid-cols-7 mb-2">
-                      {["Mo","Tu","We","Th","Fr","Sa","Su"].map(d => (
+                      {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => (
                         <div
                           key={d}
                           className="text-xs text-center py-1"
@@ -237,23 +386,27 @@ export function BookingPage() {
                       ))}
                     </div>
 
-                    {/* Calendar grid */}
                     <div className="grid grid-cols-7 gap-1 mb-6">
                       {Array.from({ length: offset }).map((_, i) => (
                         <div key={`e${i}`} />
                       ))}
                       {Array.from({ length: daysInMonth }).map((_, i) => {
                         const day = i + 1;
-                        const avail = AVAILABLE_DATES.has(day);
-                        const sel = selectedDate === day;
+                        const date = new Date(year, month, day);
+                        const avail = isDayAvailable(date);
+                        const sel = selectedDate ? sameDay(selectedDate, date) : false;
                         return (
                           <button
                             key={day}
                             disabled={!avail}
-                            onClick={() => avail && setSelectedDate(day)}
+                            onClick={() => {
+                              if (!avail) return;
+                              setSelectedDate(date);
+                              setSelectedTime(null);
+                            }}
                             className="w-full aspect-square rounded-lg text-sm flex items-center justify-center transition-all"
                             style={{
-                              background: sel ? "#E8593C" : avail ? "transparent" : "transparent",
+                              background: sel ? "#E8593C" : "transparent",
                               color: sel ? "white" : avail ? "#F4F2EE" : "#4A4946",
                               cursor: avail ? "pointer" : "default",
                               border: sel ? "none" : avail ? "1px solid transparent" : "none",
@@ -278,48 +431,62 @@ export function BookingPage() {
                       })}
                     </div>
 
-                    {/* Time slots */}
                     {selectedDate && (
                       <>
                         <div
                           className="text-xs mb-3"
                           style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
                         >
-                          AVAILABLE TIMES — {MONTHS[month].toUpperCase()} {selectedDate}
+                          AVAILABLE TIMES — {MONTHS[selectedDate.getMonth()].toUpperCase()}{" "}
+                          {selectedDate.getDate()}
                         </div>
-                        <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto">
-                          {SLOTS.map(t => {
-                            const sel = selectedTime === t;
-                            return (
-                              <button
-                                key={t}
-                                onClick={() => setSelectedTime(t)}
-                                className="py-2.5 rounded-lg text-sm flex items-center justify-between px-3 transition-all"
-                                style={{
-                                  background: sel ? "#E8593C" : "transparent",
-                                  color: sel ? "white" : "#F4F2EE",
-                                  border: `1px solid ${sel ? "#E8593C" : "rgba(255,255,255,0.12)"}`,
-                                  fontFamily: "'DM Mono', monospace",
-                                }}
-                                onMouseEnter={(e) => {
-                                  if (!sel) {
-                                    (e.currentTarget as HTMLElement).style.background = "rgba(232,89,60,0.1)";
-                                    (e.currentTarget as HTMLElement).style.borderColor = "rgba(232,89,60,0.3)";
-                                  }
-                                }}
-                                onMouseLeave={(e) => {
-                                  if (!sel) {
-                                    (e.currentTarget as HTMLElement).style.background = "transparent";
-                                    (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.12)";
-                                  }
-                                }}
-                              >
-                                <span>{t}</span>
-                                <span className="text-xs opacity-60">30 min</span>
-                              </button>
-                            );
-                          })}
-                        </div>
+
+                        {slots.length === 0 ? (
+                          <div
+                            className="p-4 rounded-lg text-center text-xs"
+                            style={{
+                              background: "rgba(255,255,255,0.02)",
+                              border: "1px dashed rgba(255,255,255,0.08)",
+                              color: "#8A8882",
+                            }}
+                          >
+                            No times available on this date.
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto">
+                            {slots.map((t) => {
+                              const sel = selectedTime === t;
+                              return (
+                                <button
+                                  key={t}
+                                  onClick={() => setSelectedTime(t)}
+                                  className="py-2.5 rounded-lg text-sm flex items-center justify-between px-3 transition-all"
+                                  style={{
+                                    background: sel ? "#E8593C" : "transparent",
+                                    color: sel ? "white" : "#F4F2EE",
+                                    border: `1px solid ${sel ? "#E8593C" : "rgba(255,255,255,0.12)"}`,
+                                    fontFamily: "'DM Mono', monospace",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (!sel) {
+                                      (e.currentTarget as HTMLElement).style.background = "rgba(232,89,60,0.1)";
+                                      (e.currentTarget as HTMLElement).style.borderColor = "rgba(232,89,60,0.3)";
+                                    }
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!sel) {
+                                      (e.currentTarget as HTMLElement).style.background = "transparent";
+                                      (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.12)";
+                                    }
+                                  }}
+                                >
+                                  <span>{t}</span>
+                                  <span className="text-xs opacity-60">{durationMin} min</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
 
                         {selectedTime && (
                           <button
@@ -383,7 +550,7 @@ export function BookingPage() {
                         </label>
                         <textarea
                           value={goal}
-                          onChange={e => setGoal(e.target.value)}
+                          onChange={(e) => setGoal(e.target.value)}
                           rows={3}
                           placeholder="Tell me a bit about what you're working on..."
                           className="w-full rounded-lg px-3 py-2.5 text-sm outline-none resize-none transition-all"
@@ -403,252 +570,27 @@ export function BookingPage() {
 
                       <button
                         onClick={handleConfirm}
-                        disabled={!name || !email}
+                        disabled={
+                          !name.trim() || !email.trim() || createBooking.isPending
+                        }
                         className="w-full py-3 rounded-lg text-sm font-medium transition-all mt-2"
                         style={{
-                          background: name && email ? "#E8593C" : "rgba(255,255,255,0.06)",
-                          color: name && email ? "white" : "#4A4946",
-                          cursor: name && email ? "pointer" : "not-allowed",
+                          background:
+                            name.trim() && email.trim()
+                              ? createBooking.isPending
+                                ? "rgba(232,89,60,0.7)"
+                                : "#E8593C"
+                              : "rgba(255,255,255,0.06)",
+                          color:
+                            name.trim() && email.trim() ? "white" : "#4A4946",
+                          cursor:
+                            name.trim() && email.trim() && !createBooking.isPending
+                              ? "pointer"
+                              : "not-allowed",
                         }}
                       >
-                        Continue to payment →
+                        {createBooking.isPending ? "Booking…" : "Confirm booking"}
                       </button>
-                    </div>
-                  </>
-                )}{/* Payment step */}
-                {step === "payment" && (
-                  <>
-                    {/* Back link */}
-                    <button
-                      onClick={() => setStep("form")}
-                      className="flex items-center gap-2 text-sm mb-6 transition-colors"
-                      style={{ color: "#8A8882" }}
-                      onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#F4F2EE")}
-                      onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "#8A8882")}
-                    >
-                      <ArrowLeft size={14} strokeWidth={1.5} />
-                      Back to details
-                    </button>
-
-                    <h2
-                      className="mb-6"
-                      style={{
-                        fontFamily: "'Fraunces', serif",
-                        fontSize: "1.1rem",
-                        color: "#F4F2EE",
-                        fontWeight: 600,
-                      }}
-                    >
-                      Complete payment
-                    </h2>
-
-                    {/* Fee summary */}
-                    <div
-                      className="rounded-xl mb-5 overflow-hidden"
-                      style={{ border: "1px solid rgba(255,255,255,0.08)" }}
-                    >
-                      <div
-                        className="flex items-center justify-between px-4 py-3"
-                        style={{ background: "#1E1E21" }}
-                      >
-                        <span
-                          className="text-xs"
-                          style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace", letterSpacing: "0.07em" }}
-                        >
-                          SESSION
-                        </span>
-                        <span
-                          className="text-xs"
-                          style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace", letterSpacing: "0.07em" }}
-                        >
-                          AMOUNT
-                        </span>
-                      </div>
-                      <div
-                        className="flex items-center justify-between px-4 py-3.5"
-                        style={{ background: "#1A1A1D", borderTop: "1px solid rgba(255,255,255,0.06)" }}
-                      >
-                        <span className="text-sm" style={{ color: "#F4F2EE" }}>
-                          30-min Discovery Call
-                        </span>
-                        <span
-                          className="text-sm"
-                          style={{ color: "#F4F2EE", fontFamily: "'DM Mono', monospace" }}
-                        >
-                          $75.00
-                        </span>
-                      </div>
-                      <div
-                        className="flex items-center justify-between px-4 py-3"
-                        style={{
-                          background: "#161618",
-                          borderTop: "1px solid rgba(255,255,255,0.06)",
-                        }}
-                      >
-                        <span
-                          className="text-xs"
-                          style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
-                        >
-                          TOTAL DUE
-                        </span>
-                        <span
-                          style={{
-                            color: "#E8593C",
-                            fontFamily: "'DM Mono', monospace",
-                            fontSize: 15,
-                            fontWeight: 600,
-                          }}
-                        >
-                          $75.00
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Card fields */}
-                    <div className="flex flex-col gap-3 mb-5">
-                      {/* Card number */}
-                      <div>
-                        <label
-                          className="text-xs mb-1.5 block"
-                          style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
-                        >
-                          CARD NUMBER
-                        </label>
-                        <div
-                          className="flex items-center gap-2 rounded-lg px-3 py-2.5 transition-all"
-                          style={{
-                            background: "#1E1E21",
-                            border: "1px solid rgba(255,255,255,0.1)",
-                          }}
-                          onFocusCapture={(e) =>
-                            (e.currentTarget.style.borderColor = "rgba(232,89,60,0.5)")
-                          }
-                          onBlurCapture={(e) =>
-                            (e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)")
-                          }
-                        >
-                          <CreditCard size={14} strokeWidth={1.5} style={{ color: "#4A4946", flexShrink: 0 }} />
-                          <input
-                            value={cardNumber}
-                            onChange={(e) => setCardNumber(formatCard(e.target.value))}
-                            placeholder="1234 5678 9012 3456"
-                            className="flex-1 bg-transparent outline-none text-sm"
-                            style={{ color: "#F4F2EE", fontFamily: "'DM Mono', monospace", caretColor: "#E8593C" }}
-                            maxLength={19}
-                          />
-                          {/* Card type hint */}
-                          {cardNumber.startsWith("4") && (
-                            <span style={{ fontSize: 10, color: "#4B9EFF", fontFamily: "'DM Mono', monospace" }}>VISA</span>
-                          )}
-                          {cardNumber.startsWith("5") && (
-                            <span style={{ fontSize: 10, color: "#F0A429", fontFamily: "'DM Mono', monospace" }}>MC</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Expiry + CVC */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label
-                            className="text-xs mb-1.5 block"
-                            style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
-                          >
-                            EXPIRY
-                          </label>
-                          <input
-                            value={expiry}
-                            onChange={(e) => setExpiry(formatExpiry(e.target.value))}
-                            placeholder="MM / YY"
-                            maxLength={5}
-                            className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-all"
-                            style={{
-                              background: "#1E1E21",
-                              border: "1px solid rgba(255,255,255,0.1)",
-                              color: "#F4F2EE",
-                              fontFamily: "'DM Mono', monospace",
-                              caretColor: "#E8593C",
-                            }}
-                            onFocus={(e) =>
-                              ((e.currentTarget as HTMLElement).style.borderColor = "rgba(232,89,60,0.5)")
-                            }
-                            onBlur={(e) =>
-                              ((e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.1)")
-                            }
-                          />
-                        </div>
-                        <div>
-                          <label
-                            className="text-xs mb-1.5 block"
-                            style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
-                          >
-                            CVC
-                          </label>
-                          <input
-                            value={cvc}
-                            onChange={(e) => setCvc(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                            placeholder="•••"
-                            maxLength={4}
-                            className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-all"
-                            style={{
-                              background: "#1E1E21",
-                              border: "1px solid rgba(255,255,255,0.1)",
-                              color: "#F4F2EE",
-                              fontFamily: "'DM Mono', monospace",
-                              caretColor: "#E8593C",
-                            }}
-                            onFocus={(e) =>
-                              ((e.currentTarget as HTMLElement).style.borderColor = "rgba(232,89,60,0.5)")
-                            }
-                            onBlur={(e) =>
-                              ((e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.1)")
-                            }
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Pay button */}
-                    <button
-                      onClick={handlePay}
-                      disabled={!cardNumber || !expiry || !cvc || paying}
-                      className="w-full py-3.5 rounded-lg text-sm font-medium transition-all"
-                      style={{
-                        background:
-                          !cardNumber || !expiry || !cvc
-                            ? "rgba(255,255,255,0.06)"
-                            : paying
-                            ? "rgba(232,89,60,0.7)"
-                            : "#E8593C",
-                        color:
-                          !cardNumber || !expiry || !cvc ? "#4A4946" : "white",
-                        cursor:
-                          !cardNumber || !expiry || !cvc ? "not-allowed" : "pointer",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (cardNumber && expiry && cvc && !paying)
-                          (e.currentTarget as HTMLElement).style.background = "#FF6B47";
-                      }}
-                      onMouseLeave={(e) => {
-                        if (cardNumber && expiry && cvc && !paying)
-                          (e.currentTarget as HTMLElement).style.background = "#E8593C";
-                      }}
-                    >
-                      {paying ? "Processing…" : "Pay $75 & confirm booking"}
-                    </button>
-
-                    {/* Stripe badge */}
-                    <div className="flex items-center justify-center gap-1.5 mt-3">
-                      <Lock size={10} strokeWidth={1.5} style={{ color: "#4A4946" }} />
-                      <span
-                        style={{
-                          fontFamily: "'DM Mono', monospace",
-                          fontSize: 10,
-                          color: "#4A4946",
-                          letterSpacing: "0.04em",
-                        }}
-                      >
-                        Secured by Stripe
-                      </span>
                     </div>
                   </>
                 )}
@@ -665,7 +607,6 @@ export function BookingPage() {
               boxShadow: "0 40px 100px rgba(0,0,0,0.6)",
             }}
           >
-            {/* Geometric checkmark */}
             <div className="flex justify-center mb-6">
               <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
                 <circle cx="32" cy="32" r="30" stroke="#E8593C" strokeWidth="2" />
@@ -694,7 +635,6 @@ export function BookingPage() {
               A confirmation has been sent to {email}
             </p>
 
-            {/* Summary */}
             <div
               className="rounded-xl p-4 text-left mb-6"
               style={{
@@ -703,12 +643,23 @@ export function BookingPage() {
               }}
             >
               {[
-                { label: "Event", value: "30-min Discovery Call" },
-                { label: "Date", value: `${MONTHS[month]} ${selectedDate}, ${year}` },
-                { label: "Time", value: `${selectedTime} (Asia/Manila)` },
-                { label: "Duration", value: "30 min" },
-                { label: "Location", value: "Google Meet (link in email)" },
-              ].map(item => (
+                { label: "Event", value: event.title },
+                { label: "Date", value: confirmationDateLabel },
+                {
+                  label: "Time",
+                  value: `${selectedTime}${profile?.timezone ? ` (${profile.timezone})` : ""}`,
+                },
+                { label: "Duration", value: `${durationMin} min` },
+                {
+                  label: "Location",
+                  value:
+                    event.location_kind === "google_meet" || event.location_kind === "zoom"
+                      ? `${locationMeta.label} (link in email)`
+                      : event.location_detail
+                        ? `${locationMeta.label} — ${event.location_detail}`
+                        : locationMeta.label,
+                },
+              ].map((item) => (
                 <div
                   key={item.label}
                   className="flex justify-between py-2"
@@ -720,7 +671,9 @@ export function BookingPage() {
                   >
                     {item.label.toUpperCase()}
                   </span>
-                  <span className="text-sm" style={{ color: "#F4F2EE" }}>{item.value}</span>
+                  <span className="text-sm" style={{ color: "#F4F2EE" }}>
+                    {item.value}
+                  </span>
                 </div>
               ))}
             </div>
@@ -754,25 +707,22 @@ export function BookingPage() {
                   setSelectedTime(null);
                   setName("");
                   setEmail("");
+                  setGoal("");
                 }}
               >
-                Cancel or reschedule →
+                Book another time →
               </button>
             </div>
           </div>
         )}
 
-        {/* Schedulr badge */}
         <div className="text-center mt-6">
           <span
             className="text-xs"
             style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
           >
             Powered by{" "}
-            <button
-              onClick={() => navigate("/")}
-              style={{ color: "#E8593C" }}
-            >
+            <button onClick={() => navigate("/")} style={{ color: "#E8593C" }}>
               Schedulr
             </button>
           </span>
@@ -806,7 +756,7 @@ function FormField({
       <input
         type={type}
         value={value}
-        onChange={e => onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-all"
         style={{

@@ -5,6 +5,7 @@ import { RequireAuth } from "./components/layout/RequireAuth";
 import { Landing } from "./pages/Landing";
 import { Dashboard } from "./pages/Dashboard";
 import { EventEditor } from "./pages/EventEditor";
+import { EventList } from "./pages/EventList";
 import { BookingPage } from "./pages/BookingPage";
 import { AdminPanel } from "./pages/AdminPanel";
 import { Integrations } from "./pages/Integrations";
@@ -34,9 +35,6 @@ export const router = createBrowserRouter([
   { path: "/signup",        Component: SignUp             },
   { path: "/demo",          Component: LiveDemo           },
 
-  // ── Booking flow ────────────────────────────────────────────────────────────
-  { path: "/book",          Component: BookingPage        },
-
   // ── Internal / dev ──────────────────────────────────────────────────────────
   { path: "/components",    Component: ComponentsPage     },
 
@@ -51,7 +49,8 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/app/dashboard" replace /> },
       { path: "dashboard",    Component: Dashboard    },
-      { path: "events",       Component: EventEditor  },
+      { path: "events",       Component: EventList    },
+      { path: "events/:id",   Component: EventEditor  },
       { path: "bookings",     Component: Bookings     },
       { path: "availability", Component: Availability },
       { path: "analytics",    Component: Analytics    },
@@ -69,4 +68,7 @@ export const router = createBrowserRouter([
       { index: true, Component: AdminPanel },
     ],
   },
+
+  // ── Public booking page (keep LAST so static paths match first) ─────────────
+  { path: "/:username/:slug", Component: BookingPage },
 ]);

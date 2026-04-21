@@ -170,8 +170,48 @@ export type Database = {
           },
         ]
       }
+      event_blocked_dates: {
+        Row: {
+          created_at: string
+          date: string
+          event_type_id: string
+          id: string
+          owner_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          event_type_id: string
+          id?: string
+          owner_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          event_type_id?: string
+          id?: string
+          owner_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_blocked_dates_event_type_id_fkey"
+            columns: ["event_type_id"]
+            isOneToOne: false
+            referencedRelation: "event_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_blocked_dates_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_types: {
         Row: {
+          booking_window_days: number | null
           color: string
           created_at: string
           description: string | null
@@ -186,6 +226,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          booking_window_days?: number | null
           color?: string
           created_at?: string
           description?: string | null
@@ -200,6 +241,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          booking_window_days?: number | null
           color?: string
           created_at?: string
           description?: string | null
@@ -471,5 +513,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-A new version of Supabase CLI is available: v2.90.0 (currently installed v2.75.0)
-We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli
