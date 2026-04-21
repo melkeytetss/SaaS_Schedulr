@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import {
   AreaChart, Area, ResponsiveContainer, BarChart, Bar, Tooltip
 } from "recharts";
 import {
   Copy, Code2, Share2, PauseCircle, Calendar,
-  Clock, MoreHorizontal, RotateCcw, X
+  Clock, MoreHorizontal
 } from "lucide-react";
+import { useBookings } from "@/features/bookings/useBookings";
+import { useEvents } from "@/features/events/useEvents";
+import { useMyProfile } from "@/features/profile/useProfile";
 
 const sparkData = [
   [3,5,4,7,6,8,12],
@@ -15,27 +18,34 @@ const sparkData = [
   [800,1100,900,1300,1500,1700,1840],
 ].map(d => d.map(v => ({ v })));
 
-const BOOKINGS = [
-  { name: "Sarah K.", initials: "SK", type: "Discovery Call", time: "09:00", dur: "30 min", status: "confirmed", color: "#E8593C" },
-  { name: "James R.", initials: "JR", type: "Strategy Session", time: "11:30", dur: "60 min", status: "pending", color: "#4B9EFF" },
-  { name: "Priya M.", initials: "PM", type: "Follow-up Call", time: "14:00", dur: "30 min", status: "confirmed", color: "#2ECC8A" },
-  { name: "Tom L.", initials: "TL", type: "Intro Call", time: "15:30", dur: "30 min", status: "confirmed", color: "#F0A429" },
-];
+const EVENT_COLORS = ["#E8593C", "#4B9EFF", "#2ECC8A", "#F0A429"];
 
-const ACTIVITY = [
-  { text: "Sarah K. booked 30-min intro call", time: "09:14", type: "book" },
-  { text: "James R. cancelled strategy session", time: "08:33", type: "cancel" },
-  { text: "New reminder sent to 3 guests", time: "08:00", type: "remind" },
-  { text: "Priya M. rescheduled follow-up", time: "Yesterday", type: "reschedule" },
-  { text: "New booking page viewed 24 times", time: "Yesterday", type: "view" },
-];
+function getInitials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("");
+}
 
-const STATS = [
-  { label: "This week's bookings", value: "12", sparkIdx: 0, delta: "+3", positive: true },
-  { label: "Conversion rate", value: "68%", sparkIdx: 1, delta: "+2.4%", positive: true },
-  { label: "Upcoming today", value: "4", sparkIdx: 2, delta: "0", positive: true },
-  { label: "Revenue this month", value: "$1,840", sparkIdx: 3, delta: "+$340", positive: true },
-];
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function startOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function startOfWeek(d: Date): Date {
+  const x = startOfDay(d);
+  const day = x.getDay(); // 0 = Sunday
+  const diff = (day + 6) % 7; // Monday start
+  x.setDate(x.getDate() - diff);
+  return x;
+}
 
 function SparkLine({ data }: { data: { v: number }[] }) {
   return (
@@ -61,10 +71,70 @@ export function Dashboard() {
   const [paused, setPaused] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const { data: profile } = useMyProfile();
+  const { data: bookings = [], isLoading: bookingsLoading } = useBookings({ upcomingOnly: true });
+  const { data: events = [] } = useEvents();
+
+  const firstName = profile?.full_name?.split(" ")[0] ?? "there";
+
+  const { todayBookings, weekCount, bookingsPerDay } = useMemo(() => {
+    const now = new Date();
+    const todayStart = startOfDay(now);
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    const weekStart = startOfWeek(now);
+
+    const today: typeof bookings = [];
+    let week = 0;
+    const perDay = [0, 0, 0, 0, 0, 0, 0];
+
+    for (const b of bookings) {
+      const s = new Date(b.starts_at);
+      if (s >= todayStart && s < tomorrowStart) today.push(b);
+      if (s >= weekStart) {
+        week++;
+        const idx = (s.getDay() + 6) % 7;
+        perDay[idx]++;
+      }
+    }
+
+    return {
+      todayBookings: today,
+      weekCount: week,
+      bookingsPerDay: ["M", "T", "W", "T", "F", "S", "S"].map((day, i) => ({ day, v: perDay[i] })),
+    };
+  }, [bookings]);
+
+  const bookingLink = profile?.username
+    ? `${window.location.origin}/${profile.username}`
+    : `${window.location.origin}/book`;
+
   const handleCopy = () => {
+    void navigator.clipboard.writeText(bookingLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const eventCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const b of bookings) {
+      if (!b.event_type_id) continue;
+      map.set(b.event_type_id, (map.get(b.event_type_id) ?? 0) + 1);
+    }
+    return map;
+  }, [bookings]);
+
+  const todayDateLabel = new Date()
+    .toLocaleDateString("en-US", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })
+    .toUpperCase()
+    .replace(/,/g, "");
+
+  const stats = [
+    { label: "This week's bookings", value: String(weekCount), sparkIdx: 0, delta: "", positive: true },
+    { label: "Conversion rate", value: "—", sparkIdx: 1, delta: "", positive: true },
+    { label: "Upcoming today", value: String(todayBookings.length), sparkIdx: 2, delta: "", positive: true },
+    { label: "Revenue this month", value: "—", sparkIdx: 3, delta: "", positive: true },
+  ];
 
   return (
     <div className="min-h-[calc(100vh-48px)] p-6 md:p-8" style={{ background: "#0F0F11" }}>
@@ -80,24 +150,27 @@ export function Dashboard() {
               lineHeight: 1.2,
             }}
           >
-            Good morning, Marcus
+            Good morning, {firstName}
           </h1>
           <p className="text-sm mt-1" style={{ color: "#8A8882" }}>
             You have{" "}
-            <span style={{ color: "#F4F2EE" }}>4 bookings</span> today
+            <span style={{ color: "#F4F2EE" }}>
+              {todayBookings.length} {todayBookings.length === 1 ? "booking" : "bookings"}
+            </span>{" "}
+            today
           </p>
         </div>
         <div
           className="text-sm"
           style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace", marginTop: 4 }}
         >
-          SAT 18 APR 2026
+          {todayDateLabel}
         </div>
       </div>
 
       {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {STATS.map((stat, i) => (
+        {stats.map((stat) => (
           <div
             key={stat.label}
             className="rounded-xl p-5"
@@ -112,15 +185,6 @@ export function Dashboard() {
                 style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
               >
                 {stat.label.toUpperCase()}
-              </div>
-              <div
-                className="text-xs"
-                style={{
-                  color: stat.positive ? "#2ECC8A" : "#E8593C",
-                  fontFamily: "'DM Mono', monospace",
-                }}
-              >
-                {stat.delta}
               </div>
             </div>
             <div
@@ -169,109 +233,93 @@ export function Dashboard() {
                   fontFamily: "'DM Mono', monospace",
                 }}
               >
-                {BOOKINGS.length} total
+                {todayBookings.length} total
               </span>
             </div>
 
             <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
-              {BOOKINGS.map((b, i) => (
-                <div
-                  key={b.name}
-                  className="flex items-center gap-4 px-5 py-4 relative transition-all cursor-pointer"
-                  style={{
-                    background: hoveredBooking === i ? "#1E1E21" : "transparent",
-                  }}
-                  onMouseEnter={() => setHoveredBooking(i)}
-                  onMouseLeave={() => setHoveredBooking(null)}
-                >
-                  {/* Avatar */}
-                  <div
-                    className="flex items-center justify-center rounded-full text-xs flex-shrink-0"
-                    style={{
-                      width: 36,
-                      height: 36,
-                      background: b.color + "22",
-                      color: b.color,
-                      fontFamily: "'DM Mono', monospace",
-                      border: `1px solid ${b.color}33`,
-                    }}
-                  >
-                    {b.initials}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-sm" style={{ color: "#F4F2EE" }}>
-                        {b.name}
-                      </span>
-                      <span
-                        className="text-xs px-1.5 py-0.5 rounded"
-                        style={{
-                          background: "rgba(255,255,255,0.06)",
-                          color: "#8A8882",
-                          border: "1px solid rgba(255,255,255,0.08)",
-                        }}
-                      >
-                        {b.type}
-                      </span>
-                    </div>
-                    <div
-                      className="flex items-center gap-2 text-xs"
-                      style={{ color: "#8A8882", fontFamily: "'DM Mono', monospace" }}
-                    >
-                      <Clock size={11} strokeWidth={1.5} />
-                      {b.time} · {b.dur}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5">
-                      <div
-                        className="w-1.5 h-1.5 rounded-full"
-                        style={{
-                          background:
-                            b.status === "confirmed" ? "#2ECC8A" : "#F0A429",
-                        }}
-                      />
-                      <span
-                        className="text-xs"
-                        style={{
-                          color: b.status === "confirmed" ? "#2ECC8A" : "#F0A429",
-                          fontFamily: "'DM Mono', monospace",
-                        }}
-                      >
-                        {b.status}
-                      </span>
-                    </div>
-
-                    {/* Ghost actions on hover */}
-                    {hoveredBooking === i && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-all"
-                          style={{
-                            border: "1px solid rgba(255,255,255,0.12)",
-                            color: "#8A8882",
-                          }}
-                        >
-                          <RotateCcw size={11} strokeWidth={1.5} />
-                          Reschedule
-                        </button>
-                        <button
-                          className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-all"
-                          style={{
-                            border: "1px solid rgba(255,255,255,0.12)",
-                            color: "#8A8882",
-                          }}
-                        >
-                          <X size={11} strokeWidth={1.5} />
-                          Cancel
-                        </button>
-                      </div>
-                    )}
-                  </div>
+              {bookingsLoading && (
+                <div className="px-5 py-8 text-sm text-center" style={{ color: "#4A4946" }}>
+                  Loading…
                 </div>
-              ))}
+              )}
+              {!bookingsLoading && todayBookings.length === 0 && (
+                <div className="px-5 py-10 text-sm text-center" style={{ color: "#8A8882" }}>
+                  No bookings today. Share your link to get your first one.
+                </div>
+              )}
+              {todayBookings.map((b, i) => {
+                const et = (b as typeof b & { event_types?: { title?: string; color?: string; duration_min?: number } }).event_types;
+                const color = et?.color ?? EVENT_COLORS[i % EVENT_COLORS.length];
+                return (
+                  <div
+                    key={b.id}
+                    className="flex items-center gap-4 px-5 py-4 relative transition-all cursor-pointer"
+                    style={{ background: hoveredBooking === i ? "#1E1E21" : "transparent" }}
+                    onMouseEnter={() => setHoveredBooking(i)}
+                    onMouseLeave={() => setHoveredBooking(null)}
+                  >
+                    <div
+                      className="flex items-center justify-center rounded-full text-xs flex-shrink-0"
+                      style={{
+                        width: 36,
+                        height: 36,
+                        background: color + "22",
+                        color,
+                        fontFamily: "'DM Mono', monospace",
+                        border: `1px solid ${color}33`,
+                      }}
+                    >
+                      {getInitials(b.customer_name)}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-sm" style={{ color: "#F4F2EE" }}>
+                          {b.customer_name}
+                        </span>
+                        <span
+                          className="text-xs px-1.5 py-0.5 rounded"
+                          style={{
+                            background: "rgba(255,255,255,0.06)",
+                            color: "#8A8882",
+                            border: "1px solid rgba(255,255,255,0.08)",
+                          }}
+                        >
+                          {et?.title ?? "Event"}
+                        </span>
+                      </div>
+                      <div
+                        className="flex items-center gap-2 text-xs"
+                        style={{ color: "#8A8882", fontFamily: "'DM Mono', monospace" }}
+                      >
+                        <Clock size={11} strokeWidth={1.5} />
+                        {formatTime(b.starts_at)} · {et?.duration_min ?? "—"} min
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <div
+                          className="w-1.5 h-1.5 rounded-full"
+                          style={{
+                            background: b.status === "confirmed" ? "#2ECC8A" : "#F0A429",
+                          }}
+                        />
+                        <span
+                          className="text-xs"
+                          style={{
+                            color: b.status === "confirmed" ? "#2ECC8A" : "#F0A429",
+                            fontFamily: "'DM Mono', monospace",
+                          }}
+                        >
+                          {b.status}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -286,47 +334,8 @@ export function Dashboard() {
             <div className="text-sm mb-5" style={{ color: "#F4F2EE" }}>
               Recent activity
             </div>
-            <div className="relative">
-              {/* Timeline line */}
-              <div
-                className="absolute left-[7px] top-3 bottom-3"
-                style={{
-                  width: 1,
-                  background: "rgba(255,255,255,0.07)",
-                }}
-              />
-              {ACTIVITY.map((a, i) => (
-                <div key={i} className="flex gap-4 mb-4 last:mb-0 relative">
-                  <div
-                    className="w-3.5 h-3.5 rounded-full flex-shrink-0 mt-0.5 z-10"
-                    style={{
-                      background:
-                        a.type === "book"
-                          ? "#2ECC8A"
-                          : a.type === "cancel"
-                          ? "#E8593C"
-                          : a.type === "remind"
-                          ? "#4B9EFF"
-                          : "#F0A429",
-                      boxShadow:
-                        a.type === "book"
-                          ? "0 0 6px rgba(46,204,138,0.4)"
-                          : "none",
-                    }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm" style={{ color: "#F4F2EE" }}>
-                      {a.text}
-                    </div>
-                    <div
-                      className="text-xs mt-0.5"
-                      style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
-                    >
-                      {a.time}
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div className="text-sm text-center py-6" style={{ color: "#4A4946" }}>
+              Activity will appear here as bookings come in.
             </div>
           </div>
         </div>
@@ -344,59 +353,38 @@ export function Dashboard() {
               Quick actions
             </div>
 
-            {/* Copy booking link */}
             <button
               onClick={handleCopy}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-2 transition-all text-sm"
-              style={{
-                background: "#E8593C",
-                color: "white",
-              }}
-              onMouseEnter={(e) =>
-                ((e.currentTarget as HTMLElement).style.background = "#FF6B47")
-              }
-              onMouseLeave={(e) =>
-                ((e.currentTarget as HTMLElement).style.background = "#E8593C")
-              }
+              style={{ background: "#E8593C", color: "white" }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "#FF6B47")}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "#E8593C")}
             >
               <Copy size={14} strokeWidth={1.5} />
               {copied ? "Copied!" : "Copy booking link"}
             </button>
 
-            {/* Embed widget */}
             <div
               className="rounded-lg p-3 mb-2"
-              style={{
-                background: "#1E1E21",
-                border: "1px solid rgba(255,255,255,0.07)",
-              }}
+              style={{ background: "#1E1E21", border: "1px solid rgba(255,255,255,0.07)" }}
             >
-              <div
-                className="flex items-center justify-between mb-2 text-xs"
-                style={{ color: "#8A8882" }}
-              >
+              <div className="flex items-center justify-between mb-2 text-xs" style={{ color: "#8A8882" }}>
                 <div className="flex items-center gap-1.5">
                   <Code2 size={12} strokeWidth={1.5} style={{ color: "#E8593C" }} />
                   Embed widget
                 </div>
-                <button
-                  className="text-xs"
-                  style={{ color: "#E8593C" }}
-                  onClick={handleCopy}
-                >
+                <button className="text-xs" style={{ color: "#E8593C" }} onClick={handleCopy}>
                   Copy
                 </button>
               </div>
               <code
-                className="text-xs block"
+                className="text-xs block truncate"
                 style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
               >
-                &lt;script src="schedulr.io/embed.js"
-                data-host="marcus" /&gt;
+                &lt;script src="schedulr.io/embed.js" data-host="{profile?.username ?? "you"}" /&gt;
               </code>
             </div>
 
-            {/* Share page */}
             <button
               className="w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-2 text-sm transition-all"
               style={{
@@ -415,7 +403,6 @@ export function Dashboard() {
               Share page
             </button>
 
-            {/* Pause availability */}
             <button
               onClick={() => setPaused(!paused)}
               className="w-full flex items-center justify-between px-4 py-3 rounded-lg text-sm transition-all"
@@ -429,11 +416,7 @@ export function Dashboard() {
                 <PauseCircle size={14} strokeWidth={1.5} />
                 Pause availability
               </div>
-              {/* Toggle */}
-              <div
-                className="relative flex-shrink-0"
-                style={{ width: 36, height: 20 }}
-              >
+              <div className="relative flex-shrink-0" style={{ width: 36, height: 20 }}>
                 <div
                   className="absolute inset-0 rounded-full transition-colors"
                   style={{ background: paused ? "#E8593C" : "rgba(255,255,255,0.12)" }}
@@ -454,10 +437,7 @@ export function Dashboard() {
           {/* Mini chart */}
           <div
             className="rounded-xl p-5"
-            style={{
-              background: "#161618",
-              border: "1px solid rgba(255,255,255,0.07)",
-            }}
+            style={{ background: "#161618", border: "1px solid rgba(255,255,255,0.07)" }}
           >
             <div className="flex items-center justify-between mb-4">
               <div className="text-sm" style={{ color: "#F4F2EE" }}>
@@ -466,18 +446,7 @@ export function Dashboard() {
               <MoreHorizontal size={14} style={{ color: "#4A4946" }} />
             </div>
             <ResponsiveContainer width="100%" height={80}>
-              <BarChart
-                data={[
-                  { day: "M", v: 3 },
-                  { day: "T", v: 5 },
-                  { day: "W", v: 2 },
-                  { day: "T", v: 7 },
-                  { day: "F", v: 4 },
-                  { day: "S", v: 6 },
-                  { day: "S", v: 4 },
-                ]}
-                margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
-              >
+              <BarChart data={bookingsPerDay} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                 <Bar dataKey="v" fill="#E8593C" radius={[3, 3, 0, 0]} />
                 <Tooltip
                   contentStyle={{
@@ -496,51 +465,57 @@ export function Dashboard() {
               className="flex justify-between mt-2 text-xs"
               style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
             >
-              {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
-                <span key={i}>{d}</span>
+              {bookingsPerDay.map((d, i) => (
+                <span key={i}>{d.day}</span>
               ))}
             </div>
           </div>
 
-          {/* Upcoming event types */}
+          {/* Event types */}
           <div
             className="rounded-xl p-5"
-            style={{
-              background: "#161618",
-              border: "1px solid rgba(255,255,255,0.07)",
-            }}
+            style={{ background: "#161618", border: "1px solid rgba(255,255,255,0.07)" }}
           >
             <div className="text-sm mb-4" style={{ color: "#F4F2EE" }}>
               Event types
             </div>
-            {[
-              { name: "Discovery Call", dur: "30 min", bookings: 8, color: "#E8593C" },
-              { name: "Strategy Session", dur: "60 min", bookings: 3, color: "#4B9EFF" },
-              { name: "Follow-up", dur: "30 min", bookings: 1, color: "#2ECC8A" },
-            ].map((et) => (
+            {events.length === 0 && (
+              <div className="text-sm py-4 text-center" style={{ color: "#4A4946" }}>
+                No event types yet.{" "}
+                <button
+                  onClick={() => navigate("/app/events")}
+                  style={{ color: "#E8593C" }}
+                >
+                  Create one →
+                </button>
+              </div>
+            )}
+            {events.map((et, i) => (
               <div
-                key={et.name}
+                key={et.id}
                 className="flex items-center gap-3 mb-3 last:mb-0 cursor-pointer"
                 onClick={() => navigate("/app/events")}
               >
                 <div
                   className="w-1 self-stretch rounded-full flex-shrink-0"
-                  style={{ background: et.color }}
+                  style={{ background: et.color ?? EVENT_COLORS[i % EVENT_COLORS.length] }}
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm" style={{ color: "#F4F2EE" }}>{et.name}</div>
+                  <div className="text-sm truncate" style={{ color: "#F4F2EE" }}>
+                    {et.title}
+                  </div>
                   <div
                     className="text-xs"
                     style={{ color: "#8A8882", fontFamily: "'DM Mono', monospace" }}
                   >
-                    {et.dur}
+                    {et.duration_min} min
                   </div>
                 </div>
                 <div
                   className="text-xs"
                   style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
                 >
-                  {et.bookings} this week
+                  {eventCounts.get(et.id) ?? 0} this week
                 </div>
               </div>
             ))}

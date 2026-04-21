@@ -1,6 +1,7 @@
 import { createBrowserRouter } from "react-router";
 import { AppShell } from "./components/layout/AppShell";
 import { AdminShell } from "./components/layout/AdminShell";
+import { RequireAuth } from "./components/layout/RequireAuth";
 import { Landing } from "./pages/Landing";
 import { Dashboard } from "./pages/Dashboard";
 import { EventEditor } from "./pages/EventEditor";
@@ -42,7 +43,11 @@ export const router = createBrowserRouter([
   // ── App (authenticated) ─────────────────────────────────────────────────────
   {
     path: "/app",
-    Component: AppShell,
+    element: (
+      <RequireAuth>
+        <AppShell />
+      </RequireAuth>
+    ),
     children: [
       { index: true, element: <Navigate to="/app/dashboard" replace /> },
       { path: "dashboard",    Component: Dashboard    },
