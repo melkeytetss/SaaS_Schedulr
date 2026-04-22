@@ -2,8 +2,10 @@ import { supabase } from "@/lib/supabase";
 import type { Database } from "@/types/database";
 
 export type EventType = Database["public"]["Tables"]["event_types"]["Row"];
-export type EventTypeInsert = Database["public"]["Tables"]["event_types"]["Insert"];
-export type EventTypeUpdate = Database["public"]["Tables"]["event_types"]["Update"];
+export type EventTypeInsert =
+  Database["public"]["Tables"]["event_types"]["Insert"];
+export type EventTypeUpdate =
+  Database["public"]["Tables"]["event_types"]["Update"];
 
 export const eventsService = {
   async listForOwner(ownerId: string) {
@@ -19,7 +21,9 @@ export const eventsService = {
   async getPublic(username: string, slug: string) {
     const { data, error } = await supabase
       .from("event_types")
-      .select("*, profiles!inner(username, full_name, avatar_url, timezone)")
+      .select(
+        "*, profiles!inner(username, full_name, avatar_url, timezone, show_photo)",
+      )
       .eq("slug", slug)
       .eq("is_active", true)
       .eq("profiles.username", username)

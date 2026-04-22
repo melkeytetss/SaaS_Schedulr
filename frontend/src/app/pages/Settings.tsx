@@ -1,12 +1,21 @@
 import { useState, useRef, useEffect } from "react";
 import {
-  Camera, User, BookOpen, Bell, AlertTriangle,
-  ExternalLink, Download, Trash2, ChevronDown,
-  Check, Globe,
+  Camera,
+  User,
+  BookOpen,
+  Bell,
+  AlertTriangle,
+  ExternalLink,
+  Download,
+  Trash2,
+  ChevronDown,
+  Check,
+  Globe,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/features/auth/useAuth";
 import { useMyProfile, useUpdateProfile } from "@/features/profile/useProfile";
+import { supabase } from "@/lib/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Section {
@@ -16,24 +25,24 @@ interface Section {
 }
 
 const SECTIONS: Section[] = [
-  { id: "profile",       label: "Profile",        icon: User         },
-  { id: "booking",       label: "Booking page",   icon: BookOpen     },
-  { id: "notifications", label: "Notifications",  icon: Bell         },
-  { id: "danger",        label: "Danger zone",    icon: AlertTriangle},
+  { id: "profile", label: "Profile", icon: User },
+  { id: "booking", label: "Booking page", icon: BookOpen },
+  { id: "notifications", label: "Notifications", icon: Bell },
+  { id: "danger", label: "Danger zone", icon: AlertTriangle },
 ];
 
 type TzOption = { iana: string; label: string };
 const TIMEZONES: TzOption[] = [
-  { iana: "Asia/Manila",         label: "Asia/Manila (UTC+8)" },
-  { iana: "America/New_York",    label: "America/New_York (UTC-5)" },
-  { iana: "America/Chicago",     label: "America/Chicago (UTC-6)" },
+  { iana: "Asia/Manila", label: "Asia/Manila (UTC+8)" },
+  { iana: "America/New_York", label: "America/New_York (UTC-5)" },
+  { iana: "America/Chicago", label: "America/Chicago (UTC-6)" },
   { iana: "America/Los_Angeles", label: "America/Los_Angeles (UTC-8)" },
-  { iana: "Europe/London",       label: "Europe/London (UTC+0)" },
-  { iana: "Europe/Berlin",       label: "Europe/Berlin (UTC+1)" },
-  { iana: "Asia/Tokyo",          label: "Asia/Tokyo (UTC+9)" },
-  { iana: "Australia/Sydney",    label: "Australia/Sydney (UTC+11)" },
-  { iana: "Pacific/Auckland",    label: "Pacific/Auckland (UTC+12)" },
-  { iana: "UTC",                 label: "UTC (UTC+0)" },
+  { iana: "Europe/London", label: "Europe/London (UTC+0)" },
+  { iana: "Europe/Berlin", label: "Europe/Berlin (UTC+1)" },
+  { iana: "Asia/Tokyo", label: "Asia/Tokyo (UTC+9)" },
+  { iana: "Australia/Sydney", label: "Australia/Sydney (UTC+11)" },
+  { iana: "Pacific/Auckland", label: "Pacific/Auckland (UTC+12)" },
+  { iana: "UTC", label: "UTC (UTC+0)" },
 ];
 
 function tzLabel(iana: string): string {
@@ -51,7 +60,11 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
     <label
       className="block mb-1.5 text-xs"
-      style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace", letterSpacing: "0.07em" }}
+      style={{
+        color: "#4A4946",
+        fontFamily: "'DM Mono', monospace",
+        letterSpacing: "0.07em",
+      }}
     >
       {children}
     </label>
@@ -80,7 +93,10 @@ function TextInput({
       <FieldLabel>{label.toUpperCase()}</FieldLabel>
       <div
         className="flex items-center rounded-xl overflow-hidden transition-all"
-        style={{ background: "#1A1A1D", border: "1px solid rgba(255,255,255,0.1)" }}
+        style={{
+          background: "#1A1A1D",
+          border: "1px solid rgba(255,255,255,0.1)",
+        }}
         onFocusCapture={(e) =>
           (e.currentTarget.style.borderColor = "rgba(232,89,60,0.4)")
         }
@@ -147,10 +163,12 @@ function TextAreaInput({
           caretColor: "#E8593C",
         }}
         onFocus={(e) =>
-          ((e.currentTarget as HTMLElement).style.borderColor = "rgba(232,89,60,0.4)")
+          ((e.currentTarget as HTMLElement).style.borderColor =
+            "rgba(232,89,60,0.4)")
         }
         onBlur={(e) =>
-          ((e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.1)")
+          ((e.currentTarget as HTMLElement).style.borderColor =
+            "rgba(255,255,255,0.1)")
         }
       />
     </div>
@@ -170,7 +188,8 @@ function TimezoneDropdown({
 
   useEffect(() => {
     const handle = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     };
     document.addEventListener("mousedown", handle);
     return () => document.removeEventListener("mousedown", handle);
@@ -191,12 +210,18 @@ function TimezoneDropdown({
         >
           <div className="flex items-center gap-2">
             <Globe size={13} strokeWidth={1.5} style={{ color: "#4A4946" }} />
-            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{tzLabel(value)}</span>
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12 }}>
+              {tzLabel(value)}
+            </span>
           </div>
           <ChevronDown
             size={13}
             strokeWidth={1.5}
-            style={{ color: "#4A4946", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}
+            style={{
+              color: "#4A4946",
+              transform: open ? "rotate(180deg)" : "none",
+              transition: "transform 0.15s",
+            }}
           />
         </button>
         {open && (
@@ -215,22 +240,37 @@ function TimezoneDropdown({
               return (
                 <button
                   key={tz.iana}
-                  onClick={() => { onChange(tz.iana); setOpen(false); }}
+                  onClick={() => {
+                    onChange(tz.iana);
+                    setOpen(false);
+                  }}
                   className="w-full text-left px-4 py-2.5 flex items-center gap-2 transition-colors"
                   style={{
-                    background: selected ? "rgba(232,89,60,0.08)" : "transparent",
+                    background: selected
+                      ? "rgba(232,89,60,0.08)"
+                      : "transparent",
                     color: selected ? "#F4F2EE" : "#8A8882",
                     fontFamily: "'DM Mono', monospace",
                     fontSize: 11,
                   }}
                   onMouseEnter={(e) => {
-                    if (!selected) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)";
+                    if (!selected)
+                      (e.currentTarget as HTMLElement).style.background =
+                        "rgba(255,255,255,0.04)";
                   }}
                   onMouseLeave={(e) => {
-                    if (!selected) (e.currentTarget as HTMLElement).style.background = "transparent";
+                    if (!selected)
+                      (e.currentTarget as HTMLElement).style.background =
+                        "transparent";
                   }}
                 >
-                  {selected && <Check size={10} strokeWidth={2} style={{ color: "#E8593C", flexShrink: 0 }} />}
+                  {selected && (
+                    <Check
+                      size={10}
+                      strokeWidth={2}
+                      style={{ color: "#E8593C", flexShrink: 0 }}
+                    />
+                  )}
                   {!selected && <span style={{ width: 10, flexShrink: 0 }} />}
                   {tz.label}
                 </button>
@@ -316,7 +356,10 @@ function SectionBlock({
     <section
       id={id}
       className="pt-10 pb-10"
-      style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", scrollMarginTop: 80 }}
+      style={{
+        borderBottom: "1px solid rgba(255,255,255,0.07)",
+        scrollMarginTop: 80,
+      }}
     >
       <div className="mb-6">
         <h2
@@ -376,20 +419,22 @@ function SaveButton({
         background: saved
           ? "rgba(46,204,138,0.12)"
           : saving
-          ? "rgba(232,89,60,0.7)"
-          : disabled
-          ? "rgba(232,89,60,0.3)"
-          : "#E8593C",
+            ? "rgba(232,89,60,0.7)"
+            : disabled
+              ? "rgba(232,89,60,0.3)"
+              : "#E8593C",
         color: saved ? "#2ECC8A" : "white",
         border: saved ? "1px solid rgba(46,204,138,0.3)" : "none",
         cursor: isDisabled ? "not-allowed" : "pointer",
         opacity: disabled && !saving && !saved ? 0.6 : 1,
       }}
       onMouseEnter={(e) => {
-        if (!saving && !saved && !disabled) (e.currentTarget as HTMLElement).style.background = "#FF6B47";
+        if (!saving && !saved && !disabled)
+          (e.currentTarget as HTMLElement).style.background = "#FF6B47";
       }}
       onMouseLeave={(e) => {
-        if (!saving && !saved && !disabled) (e.currentTarget as HTMLElement).style.background = "#E8593C";
+        if (!saving && !saved && !disabled)
+          (e.currentTarget as HTMLElement).style.background = "#E8593C";
       }}
     >
       {saved ? (
@@ -411,20 +456,22 @@ export function Settings() {
   const { user } = useAuth();
   const { data: profile } = useMyProfile();
   const updateProfile = useUpdateProfile();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   // Profile
-  const [name,     setName]     = useState("");
-  const email                   = user?.email ?? "";
+  const [name, setName] = useState("");
+  const email = user?.email ?? "";
   const [timezone, setTimezone] = useState("UTC");
 
   // Booking page
-  const [slug,      setSlug]      = useState("");
+  const [slug, setSlug] = useState("");
   const [showPhoto, setShowPhoto] = useState(true);
-  const [bio,       setBio]       = useState("");
+  const [bio, setBio] = useState("");
 
-  // Notifications (local-only for now — no schema columns yet)
-  const [notifNew,     setNotifNew]     = useState(true);
-  const [notifCancel,  setNotifCancel]  = useState(true);
+  // Notifications
+  const [notifNew, setNotifNew] = useState(true);
+  const [notifCancel, setNotifCancel] = useState(true);
   const [notifSummary, setNotifSummary] = useState(false);
 
   // Active section nav
@@ -436,6 +483,9 @@ export function Settings() {
     setName(profile.full_name ?? "");
     setTimezone(profile.timezone ?? "UTC");
     setSlug(profile.username ?? "");
+    setBio(profile.bio ?? "");
+    setShowPhoto(profile.show_photo ?? true);
+    setNotifNew(profile.email_on_new_booking ?? true);
   }, [profile]);
 
   const saveProfile = async () => {
@@ -462,21 +512,133 @@ export function Settings() {
       toast.error("Use 3–40 chars: lowercase letters, numbers, hyphens");
       throw new Error("invalid username");
     }
+    const trimmedBio = bio.trim();
+    if (trimmedBio.length > 280) {
+      toast.error("Bio must be 280 characters or less");
+      throw new Error("bio too long");
+    }
     try {
-      await updateProfile.mutateAsync({ username: trimmed });
+      await updateProfile.mutateAsync({
+        username: trimmed,
+        bio: trimmedBio || null,
+        show_photo: showPhoto,
+      });
       setSlug(trimmed);
       toast.success("Booking page updated");
     } catch (e) {
-      const msg = (e as { code?: string; message?: string }).code === "23505"
-        ? "That username is already taken"
-        : (e as Error).message || "Failed to update";
+      const msg =
+        (e as { code?: string; message?: string }).code === "23505"
+          ? "That username is already taken"
+          : (e as Error).message || "Failed to update";
       toast.error(msg);
       throw e;
     }
   };
 
   const saveNotifications = async () => {
-    toast.info("Notification preferences aren't persisted yet");
+    try {
+      await updateProfile.mutateAsync({ email_on_new_booking: notifNew });
+      toast.success("Notification preferences updated");
+      if (notifCancel !== true || notifSummary !== false) {
+        toast.info("Only 'Email on new booking' is persisted right now");
+      }
+    } catch (e) {
+      toast.error(
+        (e as Error).message || "Failed to update notification preferences",
+      );
+      throw e;
+    }
+  };
+
+  const selectAvatarFile = () => {
+    if (!user || uploadingAvatar) return;
+    avatarInputRef.current?.click();
+  };
+
+  const handleAvatarKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      selectAvatarFile();
+    }
+  };
+
+  const handleAvatarChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !user) return;
+
+    const allowedTypes = new Set(["image/jpeg", "image/png", "image/gif"]);
+    if (!allowedTypes.has(file.type)) {
+      toast.error("Please upload a JPG, PNG, or GIF image");
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      toast.error("Image must be 4 MB or smaller");
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const extByType: Record<string, string> = {
+        "image/jpeg": "jpg",
+        "image/png": "png",
+        "image/gif": "gif",
+      };
+      const ext = extByType[file.type] ?? "jpg";
+      const filePath = `${user.id}/avatar.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: true,
+          contentType: file.type,
+        });
+      if (uploadError) throw uploadError;
+
+      const stalePaths = ["jpg", "png", "gif"]
+        .filter((candidateExt) => candidateExt !== ext)
+        .map((candidateExt) => `${user.id}/avatar.${candidateExt}`);
+
+      const { data: folderFiles, error: listError } = await supabase.storage
+        .from("avatars")
+        .list(user.id, { limit: 100 });
+      if (listError) {
+        console.warn("Avatar cleanup list failed", listError);
+      }
+
+      const legacyPaths = (folderFiles ?? [])
+        .map((entry: { name: string }) => entry.name)
+        .filter(
+          (name: string) =>
+            name.startsWith("avatar-") ||
+            (name.startsWith("avatar.") && name !== `avatar.${ext}`),
+        )
+        .map((name: string) => `${user.id}/${name}`);
+
+      const removePaths = Array.from(new Set([...stalePaths, ...legacyPaths]));
+      if (removePaths.length > 0) {
+        const { error: cleanupError } = await supabase.storage
+          .from("avatars")
+          .remove(removePaths);
+        if (cleanupError) {
+          // Keep upload successful even if stale cleanup fails.
+          console.warn("Avatar cleanup failed", cleanupError);
+        }
+      }
+
+      const { data } = supabase.storage.from("avatars").getPublicUrl(filePath);
+      const versionedAvatarUrl = `${data.publicUrl}?v=${Date.now()}`;
+      await updateProfile.mutateAsync({ avatar_url: versionedAvatarUrl });
+      toast.success("Profile photo updated");
+    } catch (e) {
+      toast.error((e as Error).message || "Failed to upload photo");
+      throw e;
+    } finally {
+      setUploadingAvatar(false);
+    }
   };
 
   useEffect(() => {
@@ -486,7 +648,7 @@ export function Settings() {
           if (entry.isIntersecting) setActiveSection(entry.target.id);
         });
       },
-      { rootMargin: "-30% 0px -60% 0px" }
+      { rootMargin: "-30% 0px -60% 0px" },
     );
     SECTIONS.forEach(({ id }) => {
       const el = document.getElementById(id);
@@ -523,11 +685,19 @@ export function Settings() {
         {/* ── Left nav ── */}
         <aside
           className="hidden md:flex flex-col flex-shrink-0 pt-8 px-4 sticky top-[48px] h-[calc(100vh-48px)]"
-          style={{ width: 196, borderRight: "1px solid rgba(255,255,255,0.06)" }}
+          style={{
+            width: 196,
+            borderRight: "1px solid rgba(255,255,255,0.06)",
+          }}
         >
           <div
             className="mb-3 px-2"
-            style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#4A4946", letterSpacing: "0.08em" }}
+            style={{
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 10,
+              color: "#4A4946",
+              letterSpacing: "0.08em",
+            }}
           >
             ON THIS PAGE
           </div>
@@ -544,10 +714,14 @@ export function Settings() {
                   textDecoration: "none",
                 }}
                 onMouseEnter={(e) => {
-                  if (!isActive) (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.04)";
+                  if (!isActive)
+                    (e.currentTarget as HTMLAnchorElement).style.background =
+                      "rgba(255,255,255,0.04)";
                 }}
                 onMouseLeave={(e) => {
-                  if (!isActive) (e.currentTarget as HTMLAnchorElement).style.background = "transparent";
+                  if (!isActive)
+                    (e.currentTarget as HTMLAnchorElement).style.background =
+                      "transparent";
                 }}
               >
                 <Icon
@@ -563,7 +737,6 @@ export function Settings() {
 
         {/* ── Main content ── */}
         <main className="flex-1 px-6 md:px-10 max-w-2xl">
-
           {/* ── Profile ── */}
           <SectionBlock
             id="profile"
@@ -572,7 +745,15 @@ export function Settings() {
           >
             {/* Avatar upload */}
             <div className="flex items-center gap-5 mb-7">
-              <div className="relative group">
+              <div
+                className="relative group"
+                onClick={selectAvatarFile}
+                onKeyDown={handleAvatarKeyDown}
+                role="button"
+                tabIndex={user && !uploadingAvatar ? 0 : -1}
+                aria-disabled={!user || uploadingAvatar}
+                aria-label="Upload profile photo"
+              >
                 <div
                   className="flex items-center justify-center rounded-full text-white"
                   style={{
@@ -581,18 +762,40 @@ export function Settings() {
                     background: "#E8593C",
                     fontFamily: "'DM Mono', monospace",
                     fontSize: 22,
+                    overflow: "hidden",
                   }}
                 >
-                  {initialsFrom(name)}
+                  {profile?.avatar_url ? (
+                    <img
+                      src={profile.avatar_url}
+                      alt="Profile avatar"
+                      className="w-full h-full"
+                      style={{ objectFit: "cover" }}
+                    />
+                  ) : (
+                    initialsFrom(name)
+                  )}
                 </div>
                 <div
                   className="absolute inset-0 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                   style={{ background: "rgba(0,0,0,0.55)" }}
+                  aria-hidden="true"
                 >
-                  <Camera size={16} strokeWidth={1.5} style={{ color: "white" }} />
+                  <Camera
+                    size={16}
+                    strokeWidth={1.5}
+                    style={{ color: "white" }}
+                  />
                 </div>
               </div>
               <div>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif"
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                />
                 <button
                   className="text-sm px-4 py-2 rounded-lg transition-all"
                   style={{
@@ -600,14 +803,18 @@ export function Settings() {
                     color: "#F4F2EE",
                     background: "transparent",
                   }}
+                  onClick={selectAvatarFile}
+                  disabled={!user || uploadingAvatar}
                   onMouseEnter={(e) =>
-                    ((e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)")
+                    ((e.currentTarget as HTMLElement).style.background =
+                      "rgba(255,255,255,0.05)")
                   }
                   onMouseLeave={(e) =>
-                    ((e.currentTarget as HTMLElement).style.background = "transparent")
+                    ((e.currentTarget as HTMLElement).style.background =
+                      "transparent")
                   }
                 >
-                  Upload photo
+                  {uploadingAvatar ? "Uploading…" : "Upload photo"}
                 </button>
                 <p className="text-xs mt-1.5" style={{ color: "#4A4946" }}>
                   JPG, PNG or GIF · Max 4 MB
@@ -616,8 +823,20 @@ export function Settings() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <TextInput label="Full name" value={name} onChange={setName} placeholder="Your name" />
-              <TextInput label="Email address" value={email} onChange={() => {}} placeholder="you@example.com" type="email" readOnly />
+              <TextInput
+                label="Full name"
+                value={name}
+                onChange={setName}
+                placeholder="Your name"
+              />
+              <TextInput
+                label="Email address"
+                value={email}
+                onChange={() => {}}
+                placeholder="you@example.com"
+                type="email"
+                readOnly
+              />
             </div>
             <div className="mt-4">
               <TimezoneDropdown value={timezone} onChange={setTimezone} />
@@ -644,12 +863,17 @@ export function Settings() {
                   href="#"
                   onClick={(e) => e.preventDefault()}
                   className="flex items-center gap-1 text-xs transition-colors"
-                  style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
+                  style={{
+                    color: "#4A4946",
+                    fontFamily: "'DM Mono', monospace",
+                  }}
                   onMouseEnter={(e) =>
-                    ((e.currentTarget as HTMLAnchorElement).style.color = "#E8593C")
+                    ((e.currentTarget as HTMLAnchorElement).style.color =
+                      "#E8593C")
                   }
                   onMouseLeave={(e) =>
-                    ((e.currentTarget as HTMLAnchorElement).style.color = "#4A4946")
+                    ((e.currentTarget as HTMLAnchorElement).style.color =
+                      "#4A4946")
                   }
                 >
                   schedulr.io/{slug || "your-name"}
@@ -679,7 +903,9 @@ export function Settings() {
                   height: 22,
                   borderRadius: 11,
                   background: showPhoto ? "#E8593C" : "rgba(255,255,255,0.1)",
-                  boxShadow: showPhoto ? "0 0 10px rgba(232,89,60,0.3)" : "none",
+                  boxShadow: showPhoto
+                    ? "0 0 10px rgba(232,89,60,0.3)"
+                    : "none",
                   transition: "background 0.2s",
                 }}
                 role="switch"
@@ -708,7 +934,11 @@ export function Settings() {
               />
               <div
                 className="flex justify-end mt-1.5"
-                style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#4A4946" }}
+                style={{
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: 10,
+                  color: "#4A4946",
+                }}
               >
                 {bio.length} / 280
               </div>
@@ -726,10 +956,7 @@ export function Settings() {
               className="rounded-xl overflow-hidden"
               style={{ border: "1px solid rgba(255,255,255,0.07)" }}
             >
-              <div
-                className="px-5"
-                style={{ background: "#161618" }}
-              >
+              <div className="px-5" style={{ background: "#161618" }}>
                 <ToggleRow
                   label="Email on new booking"
                   description="Receive an email each time someone books a session"
@@ -754,10 +981,7 @@ export function Settings() {
           </SectionBlock>
 
           {/* ── Danger zone ── */}
-          <SectionBlock
-            id="danger"
-            title="Danger zone"
-          >
+          <SectionBlock id="danger" title="Danger zone">
             <div
               className="rounded-xl p-5"
               style={{
@@ -775,7 +999,10 @@ export function Settings() {
                     <div className="text-sm" style={{ color: "#F4F2EE" }}>
                       Export my data
                     </div>
-                    <div className="text-xs mt-0.5" style={{ color: "#4A4946" }}>
+                    <div
+                      className="text-xs mt-0.5"
+                      style={{ color: "#4A4946" }}
+                    >
                       Download a CSV of all your bookings and event data
                     </div>
                   </div>
@@ -787,11 +1014,13 @@ export function Settings() {
                       background: "transparent",
                     }}
                     onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
+                      (e.currentTarget as HTMLElement).style.background =
+                        "rgba(255,255,255,0.05)";
                       (e.currentTarget as HTMLElement).style.color = "#F4F2EE";
                     }}
                     onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.background = "transparent";
+                      (e.currentTarget as HTMLElement).style.background =
+                        "transparent";
                       (e.currentTarget as HTMLElement).style.color = "#8A8882";
                     }}
                   >
@@ -806,7 +1035,10 @@ export function Settings() {
                     <div className="text-sm" style={{ color: "#F4F2EE" }}>
                       Delete account
                     </div>
-                    <div className="text-xs mt-0.5" style={{ color: "#4A4946" }}>
+                    <div
+                      className="text-xs mt-0.5"
+                      style={{ color: "#4A4946" }}
+                    >
                       Permanently delete your Schedulr account and all data.
                       This cannot be undone.
                     </div>
@@ -819,10 +1051,12 @@ export function Settings() {
                       background: "transparent",
                     }}
                     onMouseEnter={(e) =>
-                      ((e.currentTarget as HTMLElement).style.background = "rgba(232,89,60,0.07)")
+                      ((e.currentTarget as HTMLElement).style.background =
+                        "rgba(232,89,60,0.07)")
                     }
                     onMouseLeave={(e) =>
-                      ((e.currentTarget as HTMLElement).style.background = "transparent")
+                      ((e.currentTarget as HTMLElement).style.background =
+                        "transparent")
                     }
                   >
                     <Trash2 size={13} strokeWidth={1.5} />

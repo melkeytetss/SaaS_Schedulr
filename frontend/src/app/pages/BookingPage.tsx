@@ -2,8 +2,16 @@ import { useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router";
 import {
-  ChevronLeft, ChevronRight, Video, Phone, MapPin, FileText,
-  Calendar, Clock, Zap, ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Video,
+  Phone,
+  MapPin,
+  FileText,
+  Calendar,
+  Clock,
+  Zap,
+  ArrowLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePublicEvent } from "@/features/events/useEvents";
@@ -12,15 +20,22 @@ import {
   useAvailabilityRulesFor,
   useAvailabilityOverridesFor,
 } from "@/features/availability/useAvailability";
-import {
-  generateSlots,
-  isDateBlocked,
-} from "@/features/availability/slots";
+import { generateSlots, isDateBlocked } from "@/features/availability/slots";
 import { bookingsService } from "@/features/bookings/bookingsService";
 
 const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 const LOCATION_LABELS: Record<string, { label: string; Icon: typeof Video }> = {
@@ -46,7 +61,11 @@ export function BookingPage() {
   const { username, slug } = useParams<{ username: string; slug: string }>();
 
   const today = new Date();
-  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const todayStart = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+  );
 
   const {
     data: event,
@@ -55,9 +74,19 @@ export function BookingPage() {
   } = usePublicEvent(username ?? "", slug ?? "");
 
   const ownerId = event?.owner_id;
-  const profile = (event as typeof event & {
-    profiles?: { username: string; full_name: string; avatar_url: string | null; timezone: string | null };
-  } | undefined)?.profiles;
+  const profile = (
+    event as
+      | (typeof event & {
+          profiles?: {
+            username: string;
+            full_name: string;
+            avatar_url: string | null;
+            timezone: string | null;
+            show_photo: boolean | null;
+          };
+        })
+      | undefined
+  )?.profiles;
 
   const { data: rules = [] } = useAvailabilityRulesFor(ownerId);
   const { data: overrides = [] } = useAvailabilityOverridesFor(ownerId);
@@ -174,7 +203,14 @@ export function BookingPage() {
   };
 
   const handleConfirm = async () => {
-    if (!event || !selectedDate || !selectedTime || !name.trim() || !email.trim()) return;
+    if (
+      !event ||
+      !selectedDate ||
+      !selectedTime ||
+      !name.trim() ||
+      !email.trim()
+    )
+      return;
     const [hh, mm] = selectedTime.split(":").map(Number);
     const starts = new Date(selectedDate);
     starts.setHours(hh, mm, 0, 0);
@@ -191,7 +227,9 @@ export function BookingPage() {
       });
       setStep("confirmed");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not create booking");
+      toast.error(
+        err instanceof Error ? err.message : "Could not create booking",
+      );
     }
   };
 
@@ -242,11 +280,15 @@ export function BookingPage() {
                     fontFamily: "'DM Mono', monospace",
                   }}
                 >
-                  {profile?.avatar_url ? (
+                  {profile?.show_photo !== false && profile?.avatar_url ? (
                     <img
                       src={profile.avatar_url}
                       alt={profile.full_name ?? ""}
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                      }}
                     />
                   ) : (
                     initials
@@ -295,7 +337,10 @@ export function BookingPage() {
                 </div>
 
                 {event.description && (
-                  <p className="text-sm" style={{ color: "#8A8882", lineHeight: 1.7 }}>
+                  <p
+                    className="text-sm"
+                    style={{ color: "#8A8882", lineHeight: 1.7 }}
+                  >
                     {event.description}
                   </p>
                 )}
@@ -310,7 +355,10 @@ export function BookingPage() {
                   >
                     <div
                       className="text-xs mb-1"
-                      style={{ color: "#E8593C", fontFamily: "'DM Mono', monospace" }}
+                      style={{
+                        color: "#E8593C",
+                        fontFamily: "'DM Mono', monospace",
+                      }}
                     >
                       SELECTED TIME
                     </div>
@@ -319,7 +367,10 @@ export function BookingPage() {
                     </div>
                     <div
                       className="text-sm"
-                      style={{ color: "#8A8882", fontFamily: "'DM Mono', monospace" }}
+                      style={{
+                        color: "#8A8882",
+                        fontFamily: "'DM Mono', monospace",
+                      }}
                     >
                       {selectedTime} · {durationMin} min
                     </div>
@@ -328,7 +379,10 @@ export function BookingPage() {
 
                 <div
                   className="mt-6 text-xs"
-                  style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
+                  style={{
+                    color: "#4A4946",
+                    fontFamily: "'DM Mono', monospace",
+                  }}
                 >
                   Showing times in: {profile?.timezone ?? "UTC"}
                 </div>
@@ -352,7 +406,8 @@ export function BookingPage() {
                       <div className="flex gap-1">
                         <button
                           onClick={() =>
-                            canGoPrev && setViewMonth(new Date(year, month - 1, 1))
+                            canGoPrev &&
+                            setViewMonth(new Date(year, month - 1, 1))
                           }
                           disabled={!canGoPrev}
                           className="w-7 h-7 flex items-center justify-center rounded-lg transition-all"
@@ -365,7 +420,9 @@ export function BookingPage() {
                           <ChevronLeft size={14} />
                         </button>
                         <button
-                          onClick={() => setViewMonth(new Date(year, month + 1, 1))}
+                          onClick={() =>
+                            setViewMonth(new Date(year, month + 1, 1))
+                          }
                           className="w-7 h-7 flex items-center justify-center rounded-lg transition-all"
                           style={{ color: "#8A8882", background: "#1E1E21" }}
                         >
@@ -379,7 +436,10 @@ export function BookingPage() {
                         <div
                           key={d}
                           className="text-xs text-center py-1"
-                          style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
+                          style={{
+                            color: "#4A4946",
+                            fontFamily: "'DM Mono', monospace",
+                          }}
                         >
                           {d}
                         </div>
@@ -394,7 +454,9 @@ export function BookingPage() {
                         const day = i + 1;
                         const date = new Date(year, month, day);
                         const avail = isDayAvailable(date);
-                        const sel = selectedDate ? sameDay(selectedDate, date) : false;
+                        const sel = selectedDate
+                          ? sameDay(selectedDate, date)
+                          : false;
                         return (
                           <button
                             key={day}
@@ -407,21 +469,35 @@ export function BookingPage() {
                             className="w-full aspect-square rounded-lg text-sm flex items-center justify-center transition-all"
                             style={{
                               background: sel ? "#E8593C" : "transparent",
-                              color: sel ? "white" : avail ? "#F4F2EE" : "#4A4946",
+                              color: sel
+                                ? "white"
+                                : avail
+                                  ? "#F4F2EE"
+                                  : "#4A4946",
                               cursor: avail ? "pointer" : "default",
-                              border: sel ? "none" : avail ? "1px solid transparent" : "none",
+                              border: sel
+                                ? "none"
+                                : avail
+                                  ? "1px solid transparent"
+                                  : "none",
                               fontFamily: "'DM Mono', monospace",
                             }}
                             onMouseEnter={(e) => {
                               if (avail && !sel) {
-                                (e.currentTarget as HTMLElement).style.background = "rgba(232,89,60,0.15)";
-                                (e.currentTarget as HTMLElement).style.color = "#E8593C";
+                                (
+                                  e.currentTarget as HTMLElement
+                                ).style.background = "rgba(232,89,60,0.15)";
+                                (e.currentTarget as HTMLElement).style.color =
+                                  "#E8593C";
                               }
                             }}
                             onMouseLeave={(e) => {
                               if (avail && !sel) {
-                                (e.currentTarget as HTMLElement).style.background = "transparent";
-                                (e.currentTarget as HTMLElement).style.color = "#F4F2EE";
+                                (
+                                  e.currentTarget as HTMLElement
+                                ).style.background = "transparent";
+                                (e.currentTarget as HTMLElement).style.color =
+                                  "#F4F2EE";
                               }
                             }}
                           >
@@ -435,9 +511,13 @@ export function BookingPage() {
                       <>
                         <div
                           className="text-xs mb-3"
-                          style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
+                          style={{
+                            color: "#4A4946",
+                            fontFamily: "'DM Mono', monospace",
+                          }}
                         >
-                          AVAILABLE TIMES — {MONTHS[selectedDate.getMonth()].toUpperCase()}{" "}
+                          AVAILABLE TIMES —{" "}
+                          {MONTHS[selectedDate.getMonth()].toUpperCase()}{" "}
                           {selectedDate.getDate()}
                         </div>
 
@@ -469,19 +549,32 @@ export function BookingPage() {
                                   }}
                                   onMouseEnter={(e) => {
                                     if (!sel) {
-                                      (e.currentTarget as HTMLElement).style.background = "rgba(232,89,60,0.1)";
-                                      (e.currentTarget as HTMLElement).style.borderColor = "rgba(232,89,60,0.3)";
+                                      (
+                                        e.currentTarget as HTMLElement
+                                      ).style.background =
+                                        "rgba(232,89,60,0.1)";
+                                      (
+                                        e.currentTarget as HTMLElement
+                                      ).style.borderColor =
+                                        "rgba(232,89,60,0.3)";
                                     }
                                   }}
                                   onMouseLeave={(e) => {
                                     if (!sel) {
-                                      (e.currentTarget as HTMLElement).style.background = "transparent";
-                                      (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.12)";
+                                      (
+                                        e.currentTarget as HTMLElement
+                                      ).style.background = "transparent";
+                                      (
+                                        e.currentTarget as HTMLElement
+                                      ).style.borderColor =
+                                        "rgba(255,255,255,0.12)";
                                     }
                                   }}
                                 >
                                   <span>{t}</span>
-                                  <span className="text-xs opacity-60">{durationMin} min</span>
+                                  <span className="text-xs opacity-60">
+                                    {durationMin} min
+                                  </span>
                                 </button>
                               );
                             })}
@@ -493,8 +586,16 @@ export function BookingPage() {
                             onClick={() => setStep("form")}
                             className="w-full mt-4 py-3 rounded-lg text-sm font-medium transition-all"
                             style={{ background: "#E8593C", color: "white" }}
-                            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "#FF6B47")}
-                            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "#E8593C")}
+                            onMouseEnter={(e) =>
+                              ((
+                                e.currentTarget as HTMLElement
+                              ).style.background = "#FF6B47")
+                            }
+                            onMouseLeave={(e) =>
+                              ((
+                                e.currentTarget as HTMLElement
+                              ).style.background = "#E8593C")
+                            }
                           >
                             Continue →
                           </button>
@@ -544,7 +645,10 @@ export function BookingPage() {
                       <div>
                         <label
                           className="text-xs mb-1.5 block"
-                          style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
+                          style={{
+                            color: "#4A4946",
+                            fontFamily: "'DM Mono', monospace",
+                          }}
                         >
                           WHAT ARE YOUR MAIN GOALS? (optional)
                         </label>
@@ -560,10 +664,14 @@ export function BookingPage() {
                             color: "#F4F2EE",
                           }}
                           onFocus={(e) =>
-                            ((e.currentTarget as HTMLElement).style.borderColor = "rgba(232,89,60,0.5)")
+                            ((
+                              e.currentTarget as HTMLElement
+                            ).style.borderColor = "rgba(232,89,60,0.5)")
                           }
                           onBlur={(e) =>
-                            ((e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.1)")
+                            ((
+                              e.currentTarget as HTMLElement
+                            ).style.borderColor = "rgba(255,255,255,0.1)")
                           }
                         />
                       </div>
@@ -571,7 +679,9 @@ export function BookingPage() {
                       <button
                         onClick={handleConfirm}
                         disabled={
-                          !name.trim() || !email.trim() || createBooking.isPending
+                          !name.trim() ||
+                          !email.trim() ||
+                          createBooking.isPending
                         }
                         className="w-full py-3 rounded-lg text-sm font-medium transition-all mt-2"
                         style={{
@@ -584,12 +694,16 @@ export function BookingPage() {
                           color:
                             name.trim() && email.trim() ? "white" : "#4A4946",
                           cursor:
-                            name.trim() && email.trim() && !createBooking.isPending
+                            name.trim() &&
+                            email.trim() &&
+                            !createBooking.isPending
                               ? "pointer"
                               : "not-allowed",
                         }}
                       >
-                        {createBooking.isPending ? "Booking…" : "Confirm booking"}
+                        {createBooking.isPending
+                          ? "Booking…"
+                          : "Confirm booking"}
                       </button>
                     </div>
                   </>
@@ -609,7 +723,13 @@ export function BookingPage() {
           >
             <div className="flex justify-center mb-6">
               <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
-                <circle cx="32" cy="32" r="30" stroke="#E8593C" strokeWidth="2" />
+                <circle
+                  cx="32"
+                  cy="32"
+                  r="30"
+                  stroke="#E8593C"
+                  strokeWidth="2"
+                />
                 <path
                   d="M20 32L28 40L44 24"
                   stroke="#E8593C"
@@ -653,7 +773,8 @@ export function BookingPage() {
                 {
                   label: "Location",
                   value:
-                    event.location_kind === "google_meet" || event.location_kind === "zoom"
+                    event.location_kind === "google_meet" ||
+                    event.location_kind === "zoom"
                       ? `${locationMeta.label} (link in email)`
                       : event.location_detail
                         ? `${locationMeta.label} — ${event.location_detail}`
@@ -667,7 +788,10 @@ export function BookingPage() {
                 >
                   <span
                     className="text-xs"
-                    style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
+                    style={{
+                      color: "#4A4946",
+                      fontFamily: "'DM Mono', monospace",
+                    }}
                   >
                     {item.label.toUpperCase()}
                   </span>
@@ -765,10 +889,12 @@ function FormField({
           color: "#F4F2EE",
         }}
         onFocus={(e) =>
-          ((e.currentTarget as HTMLElement).style.borderColor = "rgba(232,89,60,0.5)")
+          ((e.currentTarget as HTMLElement).style.borderColor =
+            "rgba(232,89,60,0.5)")
         }
         onBlur={(e) =>
-          ((e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.1)")
+          ((e.currentTarget as HTMLElement).style.borderColor =
+            "rgba(255,255,255,0.1)")
         }
       />
     </div>
