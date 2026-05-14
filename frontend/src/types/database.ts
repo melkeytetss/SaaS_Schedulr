@@ -307,10 +307,15 @@ export type Database = {
         Row: {
           avatar_url: string | null;
           bio: string | null;
+          buffer_after: string;
+          buffer_before: string;
           created_at: string;
+          daily_limit: string;
           email_on_new_booking: boolean;
           full_name: string | null;
           id: string;
+          is_paused: boolean;
+          min_notice: string;
           show_photo: boolean;
           timezone: string;
           updated_at: string;
@@ -319,10 +324,15 @@ export type Database = {
         Insert: {
           avatar_url?: string | null;
           bio?: string | null;
+          buffer_after?: string;
+          buffer_before?: string;
           created_at?: string;
+          daily_limit?: string;
           email_on_new_booking?: boolean;
           full_name?: string | null;
           id: string;
+          is_paused?: boolean;
+          min_notice?: string;
           show_photo?: boolean;
           timezone?: string;
           updated_at?: string;
@@ -331,10 +341,15 @@ export type Database = {
         Update: {
           avatar_url?: string | null;
           bio?: string | null;
+          buffer_after?: string;
+          buffer_before?: string;
           created_at?: string;
+          daily_limit?: string;
           email_on_new_booking?: boolean;
           full_name?: string | null;
           id?: string;
+          is_paused?: boolean;
+          min_notice?: string;
           show_photo?: boolean;
           timezone?: string;
           updated_at?: string;

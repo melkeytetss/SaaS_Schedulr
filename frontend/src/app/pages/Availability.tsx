@@ -12,6 +12,7 @@ import {
   useReplaceAvailabilityOverrides,
 } from "@/features/availability/useAvailability";
 import { useAuth } from "@/features/auth/useAuth";
+import { useMyProfile, useUpdateProfile } from "@/features/profile/useProfile";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface TimeSlot {
@@ -308,6 +309,8 @@ export function Availability() {
   const { data: dbOverrides = [] } = useAvailabilityOverrides();
   const replaceRules = useReplaceAvailabilityRules();
   const replaceOverrides = useReplaceAvailabilityOverrides();
+  const { data: profile } = useMyProfile();
+  const updateProfile = useUpdateProfile();
 
   const [schedule, setSchedule] = useState<Record<string, DaySchedule>>(DEFAULT_SCHEDULE);
   const [overrides, setOverrides] = useState<DateOverride[]>([]);
@@ -318,6 +321,17 @@ export function Availability() {
   const [dailyLimit, setDailyLimit] = useState("No limit");
   const [saved, setSaved] = useState(false);
   const [selectedOverrideDay, setSelectedOverrideDay] = useState<string | null>(null);
+
+  // Hydrate settings from profile
+  useEffect(() => {
+    if (profile) {
+      if (profile.timezone) setTimezone(profile.timezone);
+      if (profile.buffer_before) setBufferBefore(profile.buffer_before);
+      if (profile.buffer_after) setBufferAfter(profile.buffer_after);
+      if (profile.min_notice) setMinNotice(profile.min_notice);
+      if (profile.daily_limit) setDailyLimit(profile.daily_limit);
+    }
+  }, [profile]);
 
   // Hydrate schedule from DB on first load
   useEffect(() => {
@@ -505,6 +519,13 @@ export function Availability() {
     try {
       await replaceRules.mutateAsync(rules);
       await replaceOverrides.mutateAsync(overrideRows);
+      await updateProfile.mutateAsync({
+        timezone,
+        buffer_before: bufferBefore,
+        buffer_after: bufferAfter,
+        min_notice: minNotice,
+        daily_limit: dailyLimit,
+      });
       setSaved(true);
       toast.success("Availability saved");
       setTimeout(() => setSaved(false), 2500);
@@ -559,7 +580,7 @@ export function Availability() {
         <div>
           <span className="text-sm" style={{ color: "#F4F2EE" }}>Availability</span>
           <span className="mx-2" style={{ color: "#4A4946" }}>·</span>
-          <span className="text-sm" style={{ color: "#8A8882" }}>Marcus Studio</span>
+          <span className="text-sm" style={{ color: "#8A8882" }}>{profile?.full_name || profile?.username || "Settings"}</span>
         </div>
         <div className="flex items-center gap-3">
           <span style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace", fontSize: 11 }}>
@@ -567,20 +588,20 @@ export function Availability() {
           </span>
           <button
             onClick={handleSave}
-            disabled={replaceRules.isPending || replaceOverrides.isPending}
+            disabled={replaceRules.isPending || replaceOverrides.isPending || updateProfile.isPending}
             className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm transition-all"
             style={{
               background: saved ? "rgba(46,204,138,0.12)" : "#E8593C",
               color: saved ? "#2ECC8A" : "white",
               border: saved ? "1px solid rgba(46,204,138,0.3)" : "none",
-              opacity: replaceRules.isPending || replaceOverrides.isPending ? 0.7 : 1,
-              cursor: replaceRules.isPending || replaceOverrides.isPending ? "not-allowed" : "pointer",
+              opacity: replaceRules.isPending || replaceOverrides.isPending || updateProfile.isPending ? 0.7 : 1,
+              cursor: replaceRules.isPending || replaceOverrides.isPending || updateProfile.isPending ? "not-allowed" : "pointer",
             }}
             onMouseEnter={(e) => { if (!saved) (e.currentTarget as HTMLElement).style.background = "#FF6B47"; }}
             onMouseLeave={(e) => { if (!saved) (e.currentTarget as HTMLElement).style.background = "#E8593C"; }}
           >
             {saved ? <Check size={14} strokeWidth={1.5} /> : <Save size={14} strokeWidth={1.5} />}
-            {saved ? "Saved!" : replaceRules.isPending || replaceOverrides.isPending ? "Saving…" : "Save changes"}
+            {saved ? "Saved!" : replaceRules.isPending || replaceOverrides.isPending || updateProfile.isPending ? "Saving…" : "Save changes"}
           </button>
         </div>
       </div>

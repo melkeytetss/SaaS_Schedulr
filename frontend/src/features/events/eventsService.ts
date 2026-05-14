@@ -22,7 +22,7 @@ export const eventsService = {
     const { data, error } = await supabase
       .from("event_types")
       .select(
-        "*, profiles!inner(username, full_name, avatar_url, timezone, show_photo)",
+        "*, profiles!inner(username, full_name, avatar_url, timezone, show_photo, is_paused)",
       )
       .eq("slug", slug)
       .eq("is_active", true)

@@ -9,14 +9,8 @@ import {
 } from "lucide-react";
 import { useBookings } from "@/features/bookings/useBookings";
 import { useEvents } from "@/features/events/useEvents";
-import { useMyProfile } from "@/features/profile/useProfile";
-
-const sparkData = [
-  [3,5,4,7,6,8,12],
-  [60,55,70,65,68,72,68],
-  [1,3,2,4,2,3,4],
-  [800,1100,900,1300,1500,1700,1840],
-].map(d => d.map(v => ({ v })));
+import { useMyProfile, useUpdateProfile } from "@/features/profile/useProfile";
+import { useAnalyticsSummary } from "@/features/analytics/useAnalytics";
 
 const EVENT_COLORS = ["#E8593C", "#4B9EFF", "#2ECC8A", "#F0A429"];
 
@@ -68,12 +62,47 @@ function SparkLine({ data }: { data: { v: number }[] }) {
 export function Dashboard() {
   const navigate = useNavigate();
   const [hoveredBooking, setHoveredBooking] = useState<number | null>(null);
-  const [paused, setPaused] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedEmbed, setCopiedEmbed] = useState(false);
+  const [shared, setShared] = useState(false);
 
   const { data: profile } = useMyProfile();
-  const { data: bookings = [], isLoading: bookingsLoading } = useBookings({ upcomingOnly: true });
+  const updateProfile = useUpdateProfile();
+  const isPaused = profile?.is_paused ?? false;
+  const { data: upcomingBookings = [], isLoading: bookingsLoading } = useBookings({ upcomingOnly: true });
+  const { data: allBookings = [] } = useBookings();
   const { data: events = [] } = useEvents();
+  const { data: analytics } = useAnalyticsSummary();
+
+  const dynamicSparkData = useMemo(() => {
+    const weekSpark = [0, 0, 0, 0, 0, 0, 0];
+    const upcomingSpark = [0, 0, 0, 0, 0, 0, 0];
+    const now = new Date();
+    const today = startOfDay(now);
+
+    for (const b of allBookings) {
+      const createdDays = Math.floor((today.getTime() - startOfDay(new Date(b.created_at)).getTime()) / (1000 * 3600 * 24));
+      if (createdDays >= 0 && createdDays < 7) {
+        weekSpark[6 - createdDays]++;
+      }
+
+      const startsDays = Math.floor((startOfDay(new Date(b.starts_at)).getTime() - today.getTime()) / (1000 * 3600 * 24));
+      if (startsDays >= 0 && startsDays < 7) {
+        upcomingSpark[startsDays]++;
+      }
+    }
+
+    const convSpark = [60, 55, 70, 65, 68, 72, 68];
+    const revSpark = [0, 0, 0, 0, 0, 0, 0];
+
+    return [weekSpark, convSpark, upcomingSpark, revSpark].map(arr => arr.map(v => ({ v })));
+  }, [allBookings]);
+
+  const recentActivity = useMemo(() => {
+    return [...allBookings]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 5);
+  }, [allBookings]);
 
   const firstName = profile?.full_name?.split(" ")[0] ?? "there";
 
@@ -83,15 +112,21 @@ export function Dashboard() {
     const tomorrowStart = new Date(todayStart);
     tomorrowStart.setDate(tomorrowStart.getDate() + 1);
     const weekStart = startOfWeek(now);
+    const nextWeekStart = new Date(weekStart);
+    nextWeekStart.setDate(nextWeekStart.getDate() + 7);
 
-    const today: typeof bookings = [];
+    const today: typeof upcomingBookings = [];
     let week = 0;
     const perDay = [0, 0, 0, 0, 0, 0, 0];
 
-    for (const b of bookings) {
+    for (const b of upcomingBookings) {
       const s = new Date(b.starts_at);
       if (s >= todayStart && s < tomorrowStart) today.push(b);
-      if (s >= weekStart) {
+    }
+
+    for (const b of allBookings) {
+      const s = new Date(b.starts_at);
+      if (s >= weekStart && s < nextWeekStart) {
         week++;
         const idx = (s.getDay() + 6) % 7;
         perDay[idx]++;
@@ -103,11 +138,14 @@ export function Dashboard() {
       weekCount: week,
       bookingsPerDay: ["M", "T", "W", "T", "F", "S", "S"].map((day, i) => ({ day, v: perDay[i] })),
     };
-  }, [bookings]);
+  }, [upcomingBookings, allBookings]);
 
+  const defaultSlug = events.find(e => e.is_active)?.slug;
   const bookingLink = profile?.username
-    ? `${window.location.origin}/${profile.username}`
+    ? `${window.location.origin}/${profile.username}${defaultSlug ? `/${defaultSlug}` : ""}`
     : `${window.location.origin}/book`;
+
+  const embedSnippet = `<script src="${window.location.origin}/embed.js" data-host="${profile?.username ?? "you"}"${defaultSlug ? ` data-slug="${defaultSlug}"` : ""}></script>`;
 
   const handleCopy = () => {
     void navigator.clipboard.writeText(bookingLink);
@@ -115,14 +153,49 @@ export function Dashboard() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleCopyEmbed = () => {
+    void navigator.clipboard.writeText(embedSnippet);
+    setCopiedEmbed(true);
+    setTimeout(() => setCopiedEmbed(false), 2000);
+  };
+
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Book a meeting with ${profile?.full_name ?? "me"}`,
+          url: bookingLink,
+        });
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          void navigator.clipboard.writeText(bookingLink);
+          setShared(true);
+          setTimeout(() => setShared(false), 2000);
+        }
+      }
+    } else {
+      void navigator.clipboard.writeText(bookingLink);
+      setShared(true);
+      setTimeout(() => setShared(false), 2000);
+    }
+  };
+
   const eventCounts = useMemo(() => {
     const map = new Map<string, number>();
-    for (const b of bookings) {
+    const now = new Date();
+    const weekStart = startOfWeek(now);
+    const nextWeekStart = new Date(weekStart);
+    nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+
+    for (const b of allBookings) {
       if (!b.event_type_id) continue;
-      map.set(b.event_type_id, (map.get(b.event_type_id) ?? 0) + 1);
+      const s = new Date(b.starts_at);
+      if (s >= weekStart && s < nextWeekStart) {
+        map.set(b.event_type_id, (map.get(b.event_type_id) ?? 0) + 1);
+      }
     }
     return map;
-  }, [bookings]);
+  }, [allBookings]);
 
   const todayDateLabel = new Date()
     .toLocaleDateString("en-US", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })
@@ -131,9 +204,9 @@ export function Dashboard() {
 
   const stats = [
     { label: "This week's bookings", value: String(weekCount), sparkIdx: 0, delta: "", positive: true },
-    { label: "Conversion rate", value: "—", sparkIdx: 1, delta: "", positive: true },
+    { label: "Conversion rate", value: analytics ? `${Math.round(analytics.conversionRate * 100)}%` : "—", sparkIdx: 1, delta: "", positive: true },
     { label: "Upcoming today", value: String(todayBookings.length), sparkIdx: 2, delta: "", positive: true },
-    { label: "Revenue this month", value: "—", sparkIdx: 3, delta: "", positive: true },
+    { label: "Revenue this month", value: "$0", sparkIdx: 3, delta: "", positive: true },
   ];
 
   return (
@@ -198,7 +271,7 @@ export function Dashboard() {
             >
               {stat.value}
             </div>
-            <SparkLine data={sparkData[stat.sparkIdx]} />
+            <SparkLine data={dynamicSparkData[stat.sparkIdx]} />
           </div>
         ))}
       </div>
@@ -270,13 +343,13 @@ export function Dashboard() {
                         border: `1px solid ${color}33`,
                       }}
                     >
-                      {getInitials(b.customer_name)}
+                      {getInitials((b as any).customer_name || b.invitee_name || "??")}
                     </div>
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
                         <span className="text-sm" style={{ color: "#F4F2EE" }}>
-                          {b.customer_name}
+                          {(b as any).customer_name || b.invitee_name}
                         </span>
                         <span
                           className="text-xs px-1.5 py-0.5 rounded"
@@ -334,9 +407,48 @@ export function Dashboard() {
             <div className="text-sm mb-5" style={{ color: "#F4F2EE" }}>
               Recent activity
             </div>
-            <div className="text-sm text-center py-6" style={{ color: "#4A4946" }}>
-              Activity will appear here as bookings come in.
-            </div>
+            {recentActivity.length === 0 ? (
+              <div className="text-sm text-center py-6" style={{ color: "#4A4946" }}>
+                Activity will appear here as bookings come in.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {recentActivity.map((b, i) => {
+                  const et = (b as typeof b & { event_types?: { title?: string; color?: string; duration_min?: number } }).event_types;
+                  const color = et?.color ?? EVENT_COLORS[i % EVENT_COLORS.length];
+                  
+                  return (
+                    <div key={b.id} className="flex items-center gap-3">
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs"
+                        style={{
+                          background: color + "22",
+                          color,
+                          border: `1px solid ${color}33`,
+                          fontFamily: "'DM Mono', monospace",
+                        }}
+                      >
+                        {getInitials((b as any).customer_name || b.invitee_name || "??")}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm truncate" style={{ color: "#F4F2EE" }}>
+                          New booking from <span style={{ color }}>{(b as any).customer_name || b.invitee_name}</span>
+                        </div>
+                        <div className="text-xs" style={{ color: "#8A8882" }}>
+                          for {et?.title ?? "Event"}
+                        </div>
+                      </div>
+                      <div
+                        className="text-xs whitespace-nowrap"
+                        style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
+                      >
+                        {new Date(b.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -373,19 +485,20 @@ export function Dashboard() {
                   <Code2 size={12} strokeWidth={1.5} style={{ color: "#E8593C" }} />
                   Embed widget
                 </div>
-                <button className="text-xs" style={{ color: "#E8593C" }} onClick={handleCopy}>
-                  Copy
+                <button className="text-xs" style={{ color: "#E8593C" }} onClick={handleCopyEmbed}>
+                  {copiedEmbed ? "Copied!" : "Copy"}
                 </button>
               </div>
               <code
                 className="text-xs block truncate"
                 style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}
               >
-                &lt;script src="schedulr.io/embed.js" data-host="{profile?.username ?? "you"}" /&gt;
+                {embedSnippet}
               </code>
             </div>
 
             <button
+              onClick={handleShare}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-2 text-sm transition-all"
               style={{
                 border: "1px solid rgba(255,255,255,0.12)",
@@ -400,16 +513,18 @@ export function Dashboard() {
               }
             >
               <Share2 size={14} strokeWidth={1.5} style={{ color: "#8A8882" }} />
-              Share page
+              {shared ? "Link copied!" : "Share page"}
             </button>
 
             <button
-              onClick={() => setPaused(!paused)}
+              onClick={() => updateProfile.mutate({ is_paused: !isPaused })}
+              disabled={updateProfile.isPending}
               className="w-full flex items-center justify-between px-4 py-3 rounded-lg text-sm transition-all"
               style={{
-                border: `1px solid ${paused ? "rgba(232,89,60,0.3)" : "rgba(255,255,255,0.12)"}`,
-                color: paused ? "#E8593C" : "#F4F2EE",
-                background: paused ? "rgba(232,89,60,0.06)" : "transparent",
+                border: `1px solid ${isPaused ? "rgba(232,89,60,0.3)" : "rgba(255,255,255,0.12)"}`,
+                color: isPaused ? "#E8593C" : "#F4F2EE",
+                background: isPaused ? "rgba(232,89,60,0.06)" : "transparent",
+                opacity: updateProfile.isPending ? 0.7 : 1,
               }}
             >
               <div className="flex items-center gap-3">
@@ -419,7 +534,7 @@ export function Dashboard() {
               <div className="relative flex-shrink-0" style={{ width: 36, height: 20 }}>
                 <div
                   className="absolute inset-0 rounded-full transition-colors"
-                  style={{ background: paused ? "#E8593C" : "rgba(255,255,255,0.12)" }}
+                  style={{ background: isPaused ? "#E8593C" : "rgba(255,255,255,0.12)" }}
                 />
                 <div
                   className="absolute top-1 rounded-full transition-all"
@@ -427,7 +542,7 @@ export function Dashboard() {
                     width: 12,
                     height: 12,
                     background: "white",
-                    left: paused ? 20 : 4,
+                    left: isPaused ? 20 : 4,
                   }}
                 />
               </div>

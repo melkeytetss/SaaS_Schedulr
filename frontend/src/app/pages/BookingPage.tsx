@@ -83,6 +83,7 @@ export function BookingPage() {
             avatar_url: string | null;
             timezone: string | null;
             show_photo: boolean | null;
+            is_paused: boolean | null;
           };
         })
       | undefined
@@ -197,6 +198,7 @@ export function BookingPage() {
       viewMonth.getMonth() > today.getMonth());
 
   const isDayAvailable = (date: Date) => {
+    if (profile?.is_paused) return false;
     if (date < todayStart) return false;
     if (horizonEnd && date > horizonEnd) return false;
     return !isDateBlocked(date, rules, overrides, blockedDateStrs);
