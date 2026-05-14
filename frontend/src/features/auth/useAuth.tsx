@@ -14,6 +14,7 @@ interface AuthContextValue {
   user: User | null;
   loading: boolean;
   signIn: (email: string, password: string, captchaToken?: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signUp: (email: string, password: string, fullName: string, captchaToken?: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -45,6 +46,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email, 
           password,
           options: captchaToken ? { captchaToken } : undefined,
+        });
+        if (error) throw error;
+      },
+      signInWithGoogle: async () => {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: `${window.location.origin}/app/dashboard`,
+          },
         });
         if (error) throw error;
       },

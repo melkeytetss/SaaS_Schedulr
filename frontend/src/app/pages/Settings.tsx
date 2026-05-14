@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Check,
   Globe,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/features/auth/useAuth";
@@ -27,6 +28,7 @@ interface Section {
 const SECTIONS: Section[] = [
   { id: "profile", label: "Profile", icon: User },
   { id: "booking", label: "Booking page", icon: BookOpen },
+  { id: "scheduling", label: "Scheduling", icon: Clock },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "danger", label: "Danger zone", icon: AlertTriangle },
 ];
@@ -479,6 +481,12 @@ export function Settings() {
   const [notifCancel, setNotifCancel] = useState(true);
   const [notifSummary, setNotifSummary] = useState(false);
 
+  // Scheduling
+  const [minNotice, setMinNotice] = useState("4h");
+  const [bufferBefore, setBufferBefore] = useState("15m");
+  const [bufferAfter, setBufferAfter] = useState("15m");
+  const [dailyLimit, setDailyLimit] = useState("5");
+
   // Active section nav
   const [activeSection, setActiveSection] = useState("profile");
 
@@ -496,6 +504,10 @@ export function Settings() {
     setLinkedin(profile.linkedin_handle ?? "");
     setInstagram(profile.instagram_handle ?? "");
     setFacebook(profile.facebook_handle ?? "");
+    setMinNotice(profile.min_notice ?? "4h");
+    setBufferBefore(profile.buffer_before ?? "15m");
+    setBufferAfter(profile.buffer_after ?? "15m");
+    setDailyLimit(profile.daily_limit ?? "5");
   }, [profile]);
 
   const saveProfile = async () => {
@@ -561,6 +573,21 @@ export function Settings() {
       toast.error(
         (e as Error).message || "Failed to update notification preferences",
       );
+      throw e;
+    }
+  };
+
+  const saveScheduling = async () => {
+    try {
+      await updateProfile.mutateAsync({
+        min_notice: minNotice,
+        buffer_before: bufferBefore,
+        buffer_after: bufferAfter,
+        daily_limit: dailyLimit,
+      });
+      toast.success("Scheduling preferences updated");
+    } catch (e) {
+      toast.error((e as Error).message || "Failed to update scheduling");
       throw e;
     }
   };
@@ -1009,6 +1036,50 @@ export function Settings() {
               </div>
             </div>
             <SaveButton onSave={saveBookingPage} disabled={!profile} />
+          </SectionBlock>
+
+          {/* ── Scheduling ── */}
+          <SectionBlock
+            id="scheduling"
+            title="Scheduling"
+            subtitle="Configure booking rules and availability constraints"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <TextInput
+                label="Minimum Notice"
+                value={minNotice}
+                onChange={setMinNotice}
+                placeholder="4h, 1d, etc."
+                prefix="Notice"
+              />
+              <TextInput
+                label="Daily Limit"
+                value={dailyLimit}
+                onChange={setDailyLimit}
+                placeholder="Unlimited"
+                prefix="Limit"
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
+              <TextInput
+                label="Buffer Before"
+                value={bufferBefore}
+                onChange={setBufferBefore}
+                placeholder="0m"
+                prefix="Before"
+              />
+              <TextInput
+                label="Buffer After"
+                value={bufferAfter}
+                onChange={setBufferAfter}
+                placeholder="0m"
+                prefix="After"
+              />
+            </div>
+            <p className="text-[10px] mt-4" style={{ color: "#4A4946", fontFamily: "'DM Mono', monospace" }}>
+              TIP: Use formats like '15m' for minutes, '4h' for hours, or '1d' for days.
+            </p>
+            <SaveButton label="Save scheduling" onSave={saveScheduling} />
           </SectionBlock>
 
           {/* ── Notifications ── */}

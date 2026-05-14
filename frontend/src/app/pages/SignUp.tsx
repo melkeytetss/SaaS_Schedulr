@@ -33,7 +33,7 @@ const STRENGTH_COLORS = ["", "#E8593C", "#F0A429", "#4B9EFF", "#2ECC8A"];
 
 export function SignUp() {
   const navigate = useNavigate();
-  const { signUp } = useAuth();
+  const { signUp, signInWithGoogle } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -59,6 +59,15 @@ export function SignUp() {
       toast.error(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Google sign in failed";
+      toast.error(message);
     }
   };
 
@@ -270,6 +279,7 @@ export function SignUp() {
 
           {/* Google */}
           <button
+            onClick={handleGoogleSignIn}
             className="w-full flex items-center justify-center gap-3 py-3 rounded-xl text-sm transition-all mb-6"
             style={{ border: "1px solid rgba(255,255,255,0.12)", color: "#F4F2EE", background: "transparent" }}
             onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)"}

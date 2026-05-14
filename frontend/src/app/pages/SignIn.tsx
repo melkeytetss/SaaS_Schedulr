@@ -20,7 +20,7 @@ function GoogleIcon() {
 
 export function SignIn() {
   const navigate = useNavigate();
-  const { signIn } = useAuth();
+  const { signIn, signInWithGoogle } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -43,6 +43,15 @@ export function SignIn() {
       toast.error(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Google sign in failed";
+      toast.error(message);
     }
   };
 
@@ -106,10 +115,10 @@ export function SignIn() {
               lineHeight: 1.2,
             }}
           >
-            Welcome back
+            Enter the workspace
           </h1>
           <p className="mb-8 text-sm" style={{ color: "#8A8882", lineHeight: 1.5 }}>
-            Sign in to your Schedulr account
+            Manage your time and bookings in one place
           </p>
 
           {/* Email */}
@@ -219,6 +228,7 @@ export function SignIn() {
 
           {/* Google OAuth */}
           <button
+            onClick={handleGoogleSignIn}
             className="w-full flex items-center justify-center gap-3 py-3 rounded-xl text-sm transition-all mb-6"
             style={{
               border: "1px solid rgba(255,255,255,0.12)",
