@@ -9,7 +9,7 @@ export const bookingsService = {
   async listForOwner(ownerId: string, opts: { upcomingOnly?: boolean } = {}) {
     let q = supabase
       .from("bookings")
-      .select("*, event_types(title, color, duration_min)")
+      .select("*, event_types(title, color, duration_min, slug)")
       .eq("owner_id", ownerId)
       .order("starts_at", { ascending: true });
 

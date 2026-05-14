@@ -14,6 +14,8 @@ import {
   Filter,
   CalendarRange,
   ArrowUpDown,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -21,6 +23,7 @@ import {
   useUpdateBookingStatus,
 } from "@/features/bookings/useBookings";
 import { useEvents } from "@/features/events/useEvents";
+import { useMyProfile } from "@/features/profile/useProfile";
 
 // ---- Types -----------------------------------------------------------------
 type Status = "confirmed" | "pending" | "cancelled" | "no_show";
@@ -33,6 +36,7 @@ interface Booking {
   email: string;
   eventType: string;
   eventColor: string;
+  eventSlug: string;
   date: string;
   dateISO: string;
   dateMs: number;
@@ -116,6 +120,7 @@ function mapBookingRow(row: any): Booking {
     email: row.invitee_email ?? "",
     eventType: eventTitle,
     eventColor,
+    eventSlug: row?.event_types?.slug ?? "",
     date: validStartsAt.toLocaleDateString(undefined, {
       weekday: "short",
       day: "2-digit",
@@ -207,7 +212,7 @@ function BookingDrawer({
   booking: Booking;
   onClose: () => void;
   onCancel: (id: string) => void;
-  onReschedule: () => void;
+  onReschedule: (id: string) => void;
   onSendReminder: () => void;
   isCancelling: boolean;
 }) {
@@ -435,7 +440,7 @@ function BookingDrawer({
 
         <div className="px-6 py-5 flex flex-col gap-2">
           <button
-            onClick={onSendReminder}
+            onClick={() => onSendReminder(booking.id)}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all text-sm"
             style={{ background: "#E8593C", color: "white" }}
             onMouseEnter={(e) =>
@@ -451,7 +456,7 @@ function BookingDrawer({
 
           <div className="grid grid-cols-2 gap-2">
             <button
-              onClick={onReschedule}
+              onClick={() => onReschedule(booking.id)}
               className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm transition-all"
               style={{
                 border: "1px solid rgba(255,255,255,0.12)",
@@ -638,10 +643,392 @@ function Dropdown({
   );
 }
 
+// ---- Reschedule Modal -------------------------------------------------------
+function RescheduleModal({
+  booking,
+  profile,
+  onClose,
+  onConfirm,
+}: {
+  booking: Booking;
+  profile: any;
+  onClose: () => void;
+  onConfirm: (bookingId: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+
+  const rescheduleLink = `${window.location.origin}/${profile.username}/${booking.eventSlug}`;
+
+  const message = `Hi ${booking.name},
+
+Unfortunately, we need to reschedule our upcoming meeting scheduled for ${booking.date} at ${booking.time}.
+
+Reason for rescheduling:
+${reason || "[Please type your reason here]"}
+
+Please pick a new time that works for you using my booking link:
+${rescheduleLink}
+
+Sorry for the inconvenience!`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(message);
+    toast.success("Message copied to clipboard!");
+    onConfirm(booking.id);
+    onClose();
+  };
+
+  const handleGmail = () => {
+    const subject = encodeURIComponent(`Rescheduling our meeting: ${booking.eventType}`);
+    const body = encodeURIComponent(message);
+    window.open(
+      `https://mail.google.com/mail/?view=cm&fs=1&to=${booking.email}&su=${subject}&body=${body}`,
+      "_blank",
+    );
+    onConfirm(booking.id);
+    onClose();
+  };
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        style={{
+          background: "rgba(15,15,17,0.8)",
+          backdropFilter: "blur(4px)",
+        }}
+      >
+        <div
+          className="relative w-full max-w-lg rounded-2xl flex flex-col overflow-hidden"
+          style={{
+            background: "#161618",
+            border: "1px solid rgba(255,255,255,0.09)",
+            boxShadow: "0 24px 60px rgba(0,0,0,0.5)",
+          }}
+        >
+          <div
+            className="flex items-center justify-between px-6 py-5 flex-shrink-0"
+            style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}
+          >
+            <div
+              style={{
+                fontFamily: "'Fraunces', serif",
+                fontSize: "1.2rem",
+                fontWeight: 600,
+                color: "#F4F2EE",
+              }}
+            >
+              Reschedule Request
+            </div>
+            <button
+              onClick={onClose}
+              className="flex items-center justify-center rounded-lg transition-colors"
+              style={{
+                width: 32,
+                height: 32,
+                background: "rgba(255,255,255,0.06)",
+                color: "#8A8882",
+              }}
+              onMouseEnter={(e) =>
+                ((e.currentTarget as HTMLElement).style.background =
+                  "rgba(255,255,255,0.1)")
+              }
+              onMouseLeave={(e) =>
+                ((e.currentTarget as HTMLElement).style.background =
+                  "rgba(255,255,255,0.06)")
+              }
+            >
+              <X size={14} strokeWidth={1.5} />
+            </button>
+          </div>
+
+          <div className="px-6 py-5 flex flex-col gap-4">
+            <div>
+              <label
+                className="block text-xs mb-2"
+                style={{ color: "#8A8882", fontFamily: "'DM Mono', monospace" }}
+              >
+                REASON FOR RESCHEDULING (OPTIONAL)
+              </label>
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="E.g. I have a conflicting meeting..."
+                className="w-full bg-transparent rounded-lg p-3 text-sm outline-none resize-none transition-colors"
+                style={{
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  color: "#F4F2EE",
+                  height: 80,
+                }}
+                onFocus={(e) =>
+                  (e.target.style.borderColor = "rgba(255,255,255,0.25)")
+                }
+                onBlur={(e) =>
+                  (e.target.style.borderColor = "rgba(255,255,255,0.1)")
+                }
+              />
+            </div>
+
+            <div>
+              <label
+                className="block text-xs mb-2"
+                style={{ color: "#8A8882", fontFamily: "'DM Mono', monospace" }}
+              >
+                EMAIL PREVIEW
+              </label>
+              <div
+                className="p-4 rounded-lg text-sm whitespace-pre-wrap"
+                style={{
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.05)",
+                  color: "#8A8882",
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: 12,
+                  maxHeight: 200,
+                  overflowY: "auto",
+                }}
+              >
+                {message}
+              </div>
+            </div>
+          </div>
+
+          <div
+            className="px-6 py-4 flex gap-3"
+            style={{
+              borderTop: "1px solid rgba(255,255,255,0.07)",
+              background: "rgba(255,255,255,0.02)",
+            }}
+          >
+            <button
+              onClick={handleCopy}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm transition-all"
+              style={{
+                border: "1px solid rgba(255,255,255,0.12)",
+                color: "#F4F2EE",
+                background: "transparent",
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = "rgba(255,255,255,0.04)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.background = "transparent")
+              }
+            >
+              <Copy size={14} strokeWidth={1.5} />
+              Copy & Cancel Booking
+            </button>
+            <button
+              onClick={handleGmail}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm transition-all"
+              style={{ background: "#E8593C", color: "white" }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = "#FF6B47")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.background = "#E8593C")
+              }
+            >
+              <ExternalLink size={14} strokeWidth={1.5} />
+              Open in Gmail Web
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ---- Reminder Modal ---------------------------------------------------------
+function ReminderModal({
+  booking,
+  onClose,
+}: {
+  booking: Booking;
+  onClose: () => void;
+}) {
+  const [customNote, setCustomNote] = useState("");
+
+  const message = `Hi ${booking.name},
+
+This is a friendly reminder for our upcoming meeting:
+- Event: ${booking.eventType}
+- Date: ${booking.date}
+- Time: ${booking.time}
+
+${customNote ? `Note: ${customNote}\n\n` : ""}I'm looking forward to seeing you then!`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(message);
+    toast.success("Reminder message copied!");
+    onClose();
+  };
+
+  const handleGmail = () => {
+    const subject = encodeURIComponent(`Reminder: ${booking.eventType} with ${booking.name}`);
+    const body = encodeURIComponent(message);
+    window.open(
+      `https://mail.google.com/mail/?view=cm&fs=1&to=${booking.email}&su=${subject}&body=${body}`,
+      "_blank",
+    );
+    onClose();
+  };
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        style={{
+          background: "rgba(15,15,17,0.8)",
+          backdropFilter: "blur(4px)",
+        }}
+      >
+        <div
+          className="relative w-full max-w-lg rounded-2xl flex flex-col overflow-hidden"
+          style={{
+            background: "#161618",
+            border: "1px solid rgba(255,255,255,0.09)",
+            boxShadow: "0 24px 60px rgba(0,0,0,0.5)",
+          }}
+        >
+          <div
+            className="flex items-center justify-between px-6 py-5 flex-shrink-0"
+            style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}
+          >
+            <div
+              style={{
+                fontFamily: "'Fraunces', serif",
+                fontSize: "1.2rem",
+                fontWeight: 600,
+                color: "#F4F2EE",
+              }}
+            >
+              Send Reminder
+            </div>
+            <button
+              onClick={onClose}
+              className="flex items-center justify-center rounded-lg transition-colors"
+              style={{
+                width: 32,
+                height: 32,
+                background: "rgba(255,255,255,0.06)",
+                color: "#8A8882",
+              }}
+              onMouseEnter={(e) =>
+                ((e.currentTarget as HTMLElement).style.background =
+                  "rgba(255,255,255,0.1)")
+              }
+              onMouseLeave={(e) =>
+                ((e.currentTarget as HTMLElement).style.background =
+                  "rgba(255,255,255,0.06)")
+              }
+            >
+              <X size={14} strokeWidth={1.5} />
+            </button>
+          </div>
+
+          <div className="px-6 py-5 flex flex-col gap-4">
+            <div>
+              <label
+                className="block text-xs mb-2"
+                style={{ color: "#8A8882", fontFamily: "'DM Mono', monospace" }}
+              >
+                ADD A PERSONAL NOTE (OPTIONAL)
+              </label>
+              <textarea
+                value={customNote}
+                onChange={(e) => setCustomNote(e.target.value)}
+                placeholder="E.g. Please bring the documents we discussed..."
+                className="w-full bg-transparent rounded-lg p-3 text-sm outline-none resize-none transition-colors"
+                style={{
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  color: "#F4F2EE",
+                  height: 80,
+                }}
+                onFocus={(e) =>
+                  (e.target.style.borderColor = "rgba(255,255,255,0.25)")
+                }
+                onBlur={(e) =>
+                  (e.target.style.borderColor = "rgba(255,255,255,0.1)")
+                }
+              />
+            </div>
+
+            <div>
+              <label
+                className="block text-xs mb-2"
+                style={{ color: "#8A8882", fontFamily: "'DM Mono', monospace" }}
+              >
+                REMINDER PREVIEW
+              </label>
+              <div
+                className="p-4 rounded-lg text-sm whitespace-pre-wrap"
+                style={{
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.05)",
+                  color: "#8A8882",
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: 12,
+                  maxHeight: 200,
+                  overflowY: "auto",
+                }}
+              >
+                {message}
+              </div>
+            </div>
+          </div>
+
+          <div
+            className="px-6 py-4 flex gap-3"
+            style={{
+              borderTop: "1px solid rgba(255,255,255,0.07)",
+              background: "rgba(255,255,255,0.02)",
+            }}
+          >
+            <button
+              onClick={handleCopy}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm transition-all"
+              style={{
+                border: "1px solid rgba(255,255,255,0.12)",
+                color: "#F4F2EE",
+                background: "transparent",
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = "rgba(255,255,255,0.04)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.background = "transparent")
+              }
+            >
+              <Copy size={14} strokeWidth={1.5} />
+              Copy Reminder
+            </button>
+            <button
+              onClick={handleGmail}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm transition-all"
+              style={{ background: "#E8593C", color: "white" }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = "#FF6B47")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.background = "#E8593C")
+              }
+            >
+              <ExternalLink size={14} strokeWidth={1.5} />
+              Open in Gmail Web
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ---- Main page --------------------------------------------------------------
 export function Bookings() {
   const { data: bookingRows = [], isLoading } = useBookings();
   const { data: events = [] } = useEvents();
+  const { data: profile } = useMyProfile();
   const updateStatus = useUpdateBookingStatus();
 
   const bookings = bookingRows.map((row) => mapBookingRow(row));
@@ -655,7 +1042,15 @@ export function Bookings() {
   const [typeFilter, setTypeFilter] = useState("All types");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(
+    null,
+  );
+  const [reschedulingBookingId, setReschedulingBookingId] = useState<string | null>(
+    null,
+  );
+  const [remindingBookingId, setRemindingBookingId] = useState<string | null>(
     null,
   );
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
@@ -673,6 +1068,14 @@ export function Bookings() {
 
   const selectedBooking = selectedBookingId
     ? (bookings.find((booking) => booking.id === selectedBookingId) ?? null)
+    : null;
+
+  const reschedulingBooking = reschedulingBookingId
+    ? (bookings.find((booking) => booking.id === reschedulingBookingId) ?? null)
+    : null;
+
+  const remindingBooking = remindingBookingId
+    ? (bookings.find((booking) => booking.id === remindingBookingId) ?? null)
     : null;
 
   useEffect(() => {
@@ -713,8 +1116,13 @@ export function Bookings() {
     }
   };
 
-  const handleReschedule = () => toast.info("Reschedule flow coming soon");
-  const handleSendReminder = () => toast.info("Reminder sending coming soon");
+  const handleReschedule = (bookingId: string) => {
+    setReschedulingBookingId(bookingId);
+  };
+
+  const handleSendReminder = (bookingId: string) => {
+    setRemindingBookingId(bookingId);
+  };
 
   const filtered = bookings
     .filter((booking) => {
@@ -744,6 +1152,16 @@ export function Bookings() {
         );
       return sortAsc ? cmp : -cmp;
     });
+
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  const paginatedBookings = filtered.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter, typeFilter, dateFrom, dateTo]);
 
   const SortBtn = ({
     field,
@@ -976,7 +1394,7 @@ export function Bookings() {
                   </td>
                 </tr>
               ))
-            ) : bookings.length === 0 && !hasActiveFilters ? (
+            ) : paginatedBookings.length === 0 && !hasActiveFilters ? (
               <tr>
                 <td
                   colSpan={6}
@@ -998,7 +1416,7 @@ export function Bookings() {
                   </div>
                 </td>
               </tr>
-            ) : filtered.length === 0 ? (
+            ) : paginatedBookings.length === 0 ? (
               <tr>
                 <td
                   colSpan={6}
@@ -1031,7 +1449,7 @@ export function Bookings() {
                 </td>
               </tr>
             ) : (
-              filtered.map((booking) => {
+              paginatedBookings.map((booking) => {
                 const isHovered = hoveredRow === booking.id;
                 const isSelected = selectedBooking?.id === booking.id;
                 return (
@@ -1126,7 +1544,7 @@ export function Bookings() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleReschedule();
+                            handleReschedule(booking.id);
                           }}
                           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs transition-all"
                           style={{
@@ -1237,25 +1655,44 @@ export function Bookings() {
               fontSize: 11,
             }}
           >
-            SHOWING {filtered.length} OF {bookings.length} BOOKINGS
+            SHOWING {Math.min(filtered.length, (currentPage - 1) * pageSize + 1)}-
+            {Math.min(filtered.length, currentPage * pageSize)} OF{" "}
+            {filtered.length} BOOKINGS
           </span>
           <div className="flex items-center gap-1">
-            {["1"].map((p, i) => (
-              <button
-                key={`${p}-${i}`}
-                className="flex items-center justify-center rounded text-xs transition-all"
-                style={{
-                  width: 28,
-                  height: 28,
-                  fontFamily: "'DM Mono', monospace",
-                  background: i === 0 ? "#E8593C" : "rgba(255,255,255,0.04)",
-                  color: i === 0 ? "white" : "#8A8882",
-                  border: i === 0 ? "none" : "1px solid rgba(255,255,255,0.08)",
-                }}
-              >
-                {p}
-              </button>
-            ))}
+            {Array.from({ length: totalPages }).map((_, i) => {
+              const p = i + 1;
+              const isActive = currentPage === p;
+              return (
+                <button
+                  key={p}
+                  onClick={() => setCurrentPage(p)}
+                  className="flex items-center justify-center rounded text-xs transition-all"
+                  style={{
+                    width: 28,
+                    height: 28,
+                    fontFamily: "'DM Mono', monospace",
+                    background: isActive ? "#E8593C" : "rgba(255,255,255,0.04)",
+                    color: isActive ? "white" : "#8A8882",
+                    border: isActive
+                      ? "none"
+                      : "1px solid rgba(255,255,255,0.08)",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive)
+                      (e.currentTarget as HTMLElement).style.background =
+                        "rgba(255,255,255,0.08)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive)
+                      (e.currentTarget as HTMLElement).style.background =
+                        "rgba(255,255,255,0.04)";
+                  }}
+                >
+                  {p}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1267,9 +1704,28 @@ export function Bookings() {
           onCancel={(id) => {
             void handleCancel(id);
           }}
-          onReschedule={handleReschedule}
-          onSendReminder={handleSendReminder}
+          onReschedule={(id) => handleReschedule(id)}
+          onSendReminder={(id) => handleSendReminder(id)}
           isCancelling={updateStatus.isPending}
+        />
+      )}
+
+      {reschedulingBooking && profile && (
+        <RescheduleModal
+          booking={reschedulingBooking}
+          profile={profile}
+          onClose={() => setReschedulingBookingId(null)}
+          onConfirm={(id) => {
+            updateStatus.mutate({ id, status: "cancelled" });
+            toast.success("Booking cancelled.");
+          }}
+        />
+      )}
+
+      {remindingBooking && (
+        <ReminderModal
+          booking={remindingBooking}
+          onClose={() => setRemindingBookingId(null)}
         />
       )}
     </div>
