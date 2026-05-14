@@ -36,6 +36,19 @@ export function useBookings(opts: { upcomingOnly?: boolean } = {}) {
   return query;
 }
 
+export function usePublicBookings(ownerId: string | undefined) {
+  return useQuery({
+    queryKey: ["public_bookings", ownerId],
+    queryFn: async () => {
+      if (!ownerId) return [];
+      const { data, error } = await supabase.rpc("get_public_bookings", { p_owner_id: ownerId });
+      if (error) throw error;
+      return data as { starts_at: string; ends_at: string }[];
+    },
+    enabled: !!ownerId,
+  });
+}
+
 export function useUpdateBookingStatus() {
   const qc = useQueryClient();
   const { user } = useAuth();

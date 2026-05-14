@@ -20,8 +20,9 @@ import {
   useAvailabilityRulesFor,
   useAvailabilityOverridesFor,
 } from "@/features/availability/useAvailability";
-import { generateSlots, isDateBlocked } from "@/features/availability/slots";
+import { generateSlots, isDateBlocked, parseDurationToMin } from "@/features/availability/slots";
 import { bookingsService } from "@/features/bookings/bookingsService";
+import { usePublicBookings } from "@/features/bookings/useBookings";
 
 const MONTHS = [
   "January",
@@ -96,6 +97,7 @@ export function BookingPage() {
     () => blockedRows.map((r) => r.date),
     [blockedRows],
   );
+  const { data: publicBookings = [] } = usePublicBookings(ownerId);
 
   const [viewMonth, setViewMonth] = useState<Date>(
     new Date(today.getFullYear(), today.getMonth(), 1),
@@ -121,15 +123,28 @@ export function BookingPage() {
   }, [bookingWindowDays, todayStart]);
 
   const slots = useMemo(() => {
-    if (!selectedDate || !event) return [];
+    if (!selectedDate || !event || !profile) return [];
+    
+    const bufferBeforeMin = parseDurationToMin(profile.buffer_before, 15);
+    const bufferAfterMin = parseDurationToMin(profile.buffer_after, 0);
+    const minNoticeMin = parseDurationToMin(profile.min_notice, 120);
+    const dailyLimit = profile.daily_limit && profile.daily_limit !== 'No limit' 
+      ? parseInt(profile.daily_limit, 10) 
+      : undefined;
+
     return generateSlots({
       date: selectedDate,
       durationMin,
       rules,
       overrides,
       eventBlockedDates: blockedDateStrs,
+      bookings: publicBookings,
+      bufferBeforeMin,
+      bufferAfterMin,
+      minNoticeMin,
+      dailyLimit,
     });
-  }, [selectedDate, event, durationMin, rules, overrides, blockedDateStrs]);
+  }, [selectedDate, event, profile, durationMin, rules, overrides, blockedDateStrs, publicBookings]);
 
   if (eventLoading) {
     return (

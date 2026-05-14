@@ -24,6 +24,18 @@ export function formatDate(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+export function parseDurationToMin(dur: string | undefined | null, def = 0): number {
+  if (!dur) return def;
+  const match = dur.match(/^(\d+)\s*(min|hour|day)s?$/i);
+  if (!match) return def;
+  const val = parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+  if (unit === "min") return val;
+  if (unit === "hour") return val * 60;
+  if (unit === "day") return val * 60 * 24;
+  return def;
+}
+
 /**
  * Return the available time windows for a given date.
  * Precedence: per-event blocked dates → owner overrides → weekly rules.
@@ -83,6 +95,10 @@ export function generateSlots(args: {
   overrides: AvailabilityOverride[];
   bookings?: BookingLike[];
   eventBlockedDates?: string[];
+  bufferBeforeMin?: number;
+  bufferAfterMin?: number;
+  minNoticeMin?: number;
+  dailyLimit?: number;
 }): string[] {
   const {
     date,
@@ -91,6 +107,10 @@ export function generateSlots(args: {
     overrides,
     bookings = [],
     eventBlockedDates = [],
+    bufferBeforeMin = 0,
+    bufferAfterMin = 0,
+    minNoticeMin = 0,
+    dailyLimit,
   } = args;
   if (durationMin <= 0) return [];
 
@@ -112,13 +132,32 @@ export function generateSlots(args: {
       };
     });
 
+  if (dailyLimit !== undefined && dayBookings.length >= dailyLimit) {
+    return [];
+  }
+
+  const nowMs = Date.now();
+  const minNoticeMs = minNoticeMin * 60_000;
+
   const slots: string[] = [];
   for (const win of windows) {
     const startMin = toMinutes(win.start);
     const endMin = toMinutes(win.end);
     for (let t = startMin; t + durationMin <= endMin; t += durationMin) {
       const slotEnd = t + durationMin;
-      const collides = dayBookings.some((b) => t < b.end && slotEnd > b.start);
+      
+      const slotStartObj = new Date(date);
+      const [h, m] = fromMinutes(t).split(":").map(Number);
+      slotStartObj.setHours(h, m, 0, 0);
+
+      if (slotStartObj.getTime() < nowMs + minNoticeMs) {
+        continue;
+      }
+
+      const requiredStart = t - bufferBeforeMin;
+      const requiredEnd = slotEnd + bufferAfterMin;
+      
+      const collides = dayBookings.some((b) => requiredStart < b.end && requiredEnd > b.start);
       if (!collides) slots.push(fromMinutes(t));
     }
   }
