@@ -318,6 +318,11 @@ export type Database = {
           min_notice: string;
           show_photo: boolean;
           timezone: string;
+          twitter_handle: string | null;
+          linkedin_handle: string | null;
+          instagram_handle: string | null;
+          facebook_handle: string | null;
+          website: string | null;
           updated_at: string;
           username: string | null;
         };
@@ -335,6 +340,11 @@ export type Database = {
           min_notice?: string;
           show_photo?: boolean;
           timezone?: string;
+          twitter_handle?: string | null;
+          linkedin_handle?: string | null;
+          instagram_handle?: string | null;
+          facebook_handle?: string | null;
+          website?: string | null;
           updated_at?: string;
           username?: string | null;
         };
@@ -352,6 +362,11 @@ export type Database = {
           min_notice?: string;
           show_photo?: boolean;
           timezone?: string;
+          twitter_handle?: string | null;
+          linkedin_handle?: string | null;
+          instagram_handle?: string | null;
+          facebook_handle?: string | null;
+          website?: string | null;
           updated_at?: string;
           username?: string | null;
         };

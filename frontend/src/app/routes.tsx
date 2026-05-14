@@ -7,6 +7,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { EventEditor } from "./pages/EventEditor";
 import { EventList } from "./pages/EventList";
 import { BookingPage } from "./pages/BookingPage";
+import { PublicProfile } from "./pages/PublicProfile";
 import { AdminPanel } from "./pages/AdminPanel";
 import { Integrations } from "./pages/Integrations";
 import { Pricing } from "./pages/Pricing";
@@ -70,5 +71,6 @@ export const router = createBrowserRouter([
   },
 
   // ── Public booking page (keep LAST so static paths match first) ─────────────
+  { path: "/:username", Component: PublicProfile },
   { path: "/:username/:slug", Component: BookingPage },
 ]);

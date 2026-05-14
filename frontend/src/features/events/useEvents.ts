@@ -15,6 +15,14 @@ export function useEvents() {
   });
 }
 
+export function usePublicEvents(username: string) {
+  return useQuery({
+    queryKey: ["public_events", username],
+    queryFn: () => eventsService.listPublicEvents(username),
+    enabled: !!username,
+  });
+}
+
 export function usePublicEvent(username: string, slug: string) {
   return useQuery({
     queryKey: ["public_event", username, slug],

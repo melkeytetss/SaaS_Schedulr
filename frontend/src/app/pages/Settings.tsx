@@ -463,6 +463,11 @@ export function Settings() {
   const [name, setName] = useState("");
   const email = user?.email ?? "";
   const [timezone, setTimezone] = useState("UTC");
+  const [website, setWebsite] = useState("");
+  const [twitter, setTwitter] = useState("");
+  const [linkedin, setLinkedin] = useState("");
+  const [instagram, setInstagram] = useState("");
+  const [facebook, setFacebook] = useState("");
 
   // Booking page
   const [slug, setSlug] = useState("");
@@ -486,6 +491,11 @@ export function Settings() {
     setBio(profile.bio ?? "");
     setShowPhoto(profile.show_photo ?? true);
     setNotifNew(profile.email_on_new_booking ?? true);
+    setWebsite(profile.website ?? "");
+    setTwitter(profile.twitter_handle ?? "");
+    setLinkedin(profile.linkedin_handle ?? "");
+    setInstagram(profile.instagram_handle ?? "");
+    setFacebook(profile.facebook_handle ?? "");
   }, [profile]);
 
   const saveProfile = async () => {
@@ -494,6 +504,11 @@ export function Settings() {
       await updateProfile.mutateAsync({
         full_name: trimmed || null,
         timezone,
+        website: website.trim() || null,
+        twitter_handle: twitter.trim() || null,
+        linkedin_handle: linkedin.trim() || null,
+        instagram_handle: instagram.trim() || null,
+        facebook_handle: facebook.trim() || null,
       });
       toast.success("Profile updated");
     } catch (e) {
@@ -841,6 +856,56 @@ export function Settings() {
             <div className="mt-4">
               <TimezoneDropdown value={timezone} onChange={setTimezone} />
             </div>
+
+            {/* Social Links */}
+            <div className="mt-8 pt-6" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+              <div className="mb-4">
+                <div className="text-sm font-medium" style={{ color: "#F4F2EE" }}>Social Links</div>
+                <div className="text-xs mt-0.5 mb-4" style={{ color: "#4A4946" }}>Display links on your public booking page</div>
+              </div>
+              <div className="grid grid-cols-1 gap-4">
+                <TextInput
+                  label="Website URL"
+                  value={website}
+                  onChange={setWebsite}
+                  placeholder="https://example.com"
+                  type="url"
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <TextInput
+                    label="Twitter Handle"
+                    value={twitter}
+                    onChange={setTwitter}
+                    placeholder="username"
+                    prefix="@"
+                  />
+                  <TextInput
+                    label="LinkedIn Handle"
+                    value={linkedin}
+                    onChange={setLinkedin}
+                    placeholder="username"
+                    prefix="in/"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <TextInput
+                    label="Instagram Handle"
+                    value={instagram}
+                    onChange={setInstagram}
+                    placeholder="username"
+                    prefix="@"
+                  />
+                  <TextInput
+                    label="Facebook Handle"
+                    value={facebook}
+                    onChange={setFacebook}
+                    placeholder="username"
+                    prefix="/"
+                  />
+                </div>
+              </div>
+            </div>
+
             <SaveButton onSave={saveProfile} disabled={!profile} />
           </SectionBlock>
 

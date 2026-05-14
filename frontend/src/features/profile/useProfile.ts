@@ -11,6 +11,14 @@ export function useMyProfile() {
   });
 }
 
+export function usePublicProfile(username: string) {
+  return useQuery({
+    queryKey: ["profile", username],
+    queryFn: () => profileService.getByUsername(username),
+    enabled: !!username,
+  });
+}
+
 export function useUpdateProfile() {
   const qc = useQueryClient();
   const { user } = useAuth();

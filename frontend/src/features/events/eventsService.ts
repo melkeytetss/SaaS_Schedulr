@@ -18,6 +18,17 @@ export const eventsService = {
     return data;
   },
 
+  async listPublicEvents(username: string) {
+    const { data, error } = await supabase
+      .from("event_types")
+      .select("*, profiles!inner(username)")
+      .eq("is_active", true)
+      .eq("profiles.username", username)
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    return data;
+  },
+
   async getPublic(username: string, slug: string) {
     const { data, error } = await supabase
       .from("event_types")
