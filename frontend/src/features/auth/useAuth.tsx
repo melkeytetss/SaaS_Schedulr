@@ -13,8 +13,8 @@ interface AuthContextValue {
   session: Session | null;
   user: User | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, fullName: string) => Promise<void>;
+  signIn: (email: string, password: string, captchaToken?: string) => Promise<void>;
+  signUp: (email: string, password: string, fullName: string, captchaToken?: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -40,15 +40,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       user: session?.user ?? null,
       loading,
-      signIn: async (email, password) => {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+      signIn: async (email, password, captchaToken) => {
+        const { error } = await supabase.auth.signInWithPassword({ 
+          email, 
+          password,
+          options: captchaToken ? { captchaToken } : undefined,
+        });
         if (error) throw error;
       },
-      signUp: async (email, password, fullName) => {
+      signUp: async (email, password, fullName, captchaToken) => {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: fullName } },
+          options: { 
+            data: { full_name: fullName },
+            ...(captchaToken ? { captchaToken } : {})
+          },
         });
         if (error) throw error;
       },

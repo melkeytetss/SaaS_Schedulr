@@ -2,7 +2,10 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Zap, Eye, EyeOff, Check } from "lucide-react";
 import { toast } from "sonner";
+import { Turnstile } from "@marsidev/react-turnstile";
 import { useAuth } from "@/features/auth/useAuth";
+
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY;
 
 function GoogleIcon() {
   return (
@@ -36,14 +39,19 @@ export function SignUp() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
 
   const strength = getStrength(password);
 
   const handleCreate = async () => {
     if (!name || !email || !password) return;
+    if (TURNSTILE_SITE_KEY && !captchaToken) {
+      toast.error("Please complete the captcha");
+      return;
+    }
     setLoading(true);
     try {
-      await signUp(email, password, name);
+      await signUp(email, password, name, captchaToken);
       toast.success("Account created. Welcome to Schedulr!");
       navigate("/app/dashboard");
     } catch (err) {
@@ -229,6 +237,13 @@ export function SignUp() {
               </div>
             )}
           </div>
+
+          {/* Turnstile */}
+          {TURNSTILE_SITE_KEY && (
+            <div className="mb-6 flex justify-center">
+              <Turnstile siteKey={TURNSTILE_SITE_KEY} onSuccess={setCaptchaToken} />
+            </div>
+          )}
 
           {/* Create account */}
           <button

@@ -2,7 +2,10 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Zap, Eye, EyeOff, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
+import { Turnstile } from "@marsidev/react-turnstile";
 import { useAuth } from "@/features/auth/useAuth";
+
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY;
 
 function GoogleIcon() {
   return (
@@ -22,12 +25,17 @@ export function SignIn() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
 
   const handleSignIn = async () => {
     if (!email || !password) return;
+    if (TURNSTILE_SITE_KEY && !captchaToken) {
+      toast.error("Please complete the captcha");
+      return;
+    }
     setLoading(true);
     try {
-      await signIn(email, password);
+      await signIn(email, password, captchaToken);
       toast.success("Welcome back!");
       navigate("/app/dashboard");
     } catch (err) {
@@ -40,7 +48,7 @@ export function SignIn() {
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center px-4"
+      className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
       style={{
         background: "#0F0F11",
         color: "#F4F2EE",
@@ -177,6 +185,13 @@ export function SignIn() {
             </button>
           </div>
 
+          {/* Turnstile */}
+          {TURNSTILE_SITE_KEY && (
+            <div className="mb-6 flex justify-center">
+              <Turnstile siteKey={TURNSTILE_SITE_KEY} onSuccess={setCaptchaToken} />
+            </div>
+          )}
+
           {/* Sign in button */}
           <button
             onClick={handleSignIn}
@@ -227,7 +242,7 @@ export function SignIn() {
               onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#FF6B47")}
               onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "#E8593C")}
             >
-              Start free →
+              Signup →
             </button>
           </p>
         </div>
