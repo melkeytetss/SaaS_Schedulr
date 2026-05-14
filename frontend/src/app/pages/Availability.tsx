@@ -305,8 +305,8 @@ function OverrideCalendar({
 // ─── Main page ────────────────────────────────────────────────────────────────
 export function Availability() {
   const { user } = useAuth();
-  const { data: dbRules = [] } = useAvailabilityRules();
-  const { data: dbOverrides = [] } = useAvailabilityOverrides();
+  const { data: dbRules } = useAvailabilityRules();
+  const { data: dbOverrides } = useAvailabilityOverrides();
   const replaceRules = useReplaceAvailabilityRules();
   const replaceOverrides = useReplaceAvailabilityOverrides();
   const { data: profile } = useMyProfile();
@@ -335,7 +335,7 @@ export function Availability() {
 
   // Hydrate schedule from DB on first load
   useEffect(() => {
-    if (dbRules.length === 0) return;
+    if (!dbRules || dbRules.length === 0) return;
     const base: Record<string, DaySchedule> = {};
     for (const day of DAYS_ORDER) base[day] = { enabled: false, slots: [] };
     for (const r of dbRules) {
@@ -357,8 +357,8 @@ export function Availability() {
 
   // Hydrate overrides from DB
   useEffect(() => {
-    if (dbOverrides.length === 0) {
-      setOverrides([]);
+    if (!dbOverrides || dbOverrides.length === 0) {
+      setOverrides((prev) => prev.length === 0 ? prev : []);
       return;
     }
     const byDate = new Map<string, DateOverride>();
